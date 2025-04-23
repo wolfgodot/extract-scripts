@@ -396,14 +396,7 @@ def GetSpriteName(shapenum, apogee_1_0=False, apogee_1_1=False, spear=False, upl
     return sprite_names[shapenum]
 
 
-def FS_LoadFile(filename, is_binary=True):
-    with open(filename, 'rb' if is_binary else 'r') as f:
-        data = f.read()
-    return data
-
-
 def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
-    size = w * h
     ssrc = src[:]
     for y in range(h):
         for x in range(w):
