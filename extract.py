@@ -570,7 +570,8 @@ def extract_vswap(vswap_path):
         block = bytearray(64 * 64 * 3)
         if File_PML_LoadWall(i, block, palette):
             im = Image.frombytes('RGB', (64, 64), block, 'raw')
-            im.save(f"vswap/walls/{i}.png")
+            idx, shaded = divmod(i, 2) # every second texture is a shaded variant
+            im.save(f"vswap/walls/{idx}.png" if shaded == 0 else f"vswap/walls/{idx}_shaded.png")
         else:
             print(f"Failed to load wall {i}.")
 
