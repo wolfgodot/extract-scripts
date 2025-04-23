@@ -419,7 +419,7 @@ def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
                 if transparent:
                     dst.append(255)
 
-def File_PML_OpenPageFile(filename):
+def File_PML_OpenPageFile(filename: Path):
     global PageFile
     try:
         with open(filename, 'rb') as fp:
@@ -676,8 +676,10 @@ def File_VGA_GetChunkSize(n):
     with open(VgaFiles.FileName, 'rb') as fp:
         fp.seek(VgaFiles.offset[n])
         size_bytes = fp.read(4)
+
         if len(size_bytes) != 4:
             return 0
+
         size = struct.unpack('<L', size_bytes)[0]
         return size
 
@@ -766,7 +768,7 @@ def File_VGA_ReadPic(chunk, pic):
     return 1
 
 
-def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
+def File_VGA_OpenVgaFiles(dict_path: Path, header_path: Path, vga_path: Path):
     global VgaFiles
 
     # Check if files exist
@@ -835,7 +837,7 @@ def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
     return 1
 
 
-def extract_vga(dict_path, header_path, vga_path):
+def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
     if not File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
         print("Failed to open VGA files")
         sys.exit(1)
@@ -870,7 +872,6 @@ def main():
     input_path = Path(args.input)
 
     extract_vswap(input_path / "VSWAP.WL6")
-
     # TODO: borked
     extract_vga(input_path / "VGADICT.WL6", input_path / "VGAHEAD.WL6", input_path / "VGAGRAPH.WL6")
 
