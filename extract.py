@@ -822,10 +822,6 @@ def File_VGA_OpenVgaFiles(dict_path: Path, header_path: Path, vga_path: Path):
     # Convert to picture table
     VgaFiles.pictable = []
     for i in range(VgaFiles.TotalChunks):
-        # TODO: this is borked...
-        # 64764x65021
-        # 65020x65021
-        # 64764x64764
         width = struct.unpack('<H', picdef[i * 4:i * 4 + 2])[0]
         height = struct.unpack('<H', picdef[i * 4 + 2:i * 4 + 4])[0]
         print(f"{width}x{height}")
