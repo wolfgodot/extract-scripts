@@ -110,7 +110,29 @@ def File_VGA_ReadChunk(ctx: VGAContext, n):
     return target
 
 
-def File_VGA_ReadPic(ctx: VGAContext, chunk):
+def deplane(buf, width, height, palette):
+    buf1 = bytearray(len(buf))
+
+    hw = width * height
+    quarter = hw // 4
+
+    # Reorganize the planar data
+    for n in range(hw):
+        buf1[n] = buf[(n % 4) * quarter + n // 4]
+
+    # Convert to RGB data
+    buf2 = bytearray(hw * 3)
+
+    for n in range(hw):
+        color_idx = buf1[n]
+        buf2[n * 3 + 0] = palette[color_idx][0]
+        buf2[n * 3 + 1] = palette[color_idx][1]
+        buf2[n * 3 + 2] = palette[color_idx][2]
+
+    return buf2
+
+
+def File_VGA_ReadPic(ctx: VGAContext, chunk, palette):
     picnum = chunk - 3
     if picnum < 0:
         return None
@@ -124,25 +146,9 @@ def File_VGA_ReadPic(ctx: VGAContext, chunk):
     if buf is None:
         return None
 
-    buf1 = bytearray(len(buf))
+    buf1 = deplane(buf, wl_pic.width, wl_pic.height, palette)
 
-    hw = wl_pic.width * wl_pic.height
-    quarter = hw // 4
-
-    # Reorganize the planar data
-    for n in range(hw):
-        buf1[n] = buf[(n % 4) * quarter + n // 4]
-
-    # Convert to RGB data
-    buf2 = bytearray(hw * 3)
-
-    for n in range(hw):
-        color_idx = buf1[n]
-        buf2[n * 3 + 0] = WolfPal[color_idx][0]
-        buf2[n * 3 + 1] = WolfPal[color_idx][1]
-        buf2[n * 3 + 2] = WolfPal[color_idx][2]
-
-    return wl_pic, buf2
+    return wl_pic, buf1
 
 
 def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, vga_path: Path):
@@ -199,8 +205,12 @@ def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, v
 
 
 def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
+    spear = True if dict_path.suffix.lower() == ".sod" else False
+
     ctx = VGAContext()
-    ctx.names = gen_vgagraph_lookup_table(wl6=True)
+    ctx.names = gen_vgagraph_lookup_table(wl6=not spear)
+
+    palette = SodPal if spear else WolfPal
 
     if not File_VGA_OpenVgaFiles(ctx, dict_path, header_path, vga_path):
         print("Failed to open VGA files")
@@ -212,6 +222,9 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
     pics_path = Path("vga/pics")
     pics_path.mkdir(parents=True, exist_ok=True)
+
+    tile8_path = Path("vga/tile8")
+    tile8_path.mkdir(parents=True, exist_ok=True)
 
     endscreens_path = Path("vga/endscreens")
     endscreens_path.mkdir(parents=True, exist_ok=True)
@@ -233,14 +246,17 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                 fp.write(font)
 
         elif 3 <= chunk <= 134: # pictures
-            wl_pic, buf = File_VGA_ReadPic(ctx, chunk)
+            wl_pic, buf = File_VGA_ReadPic(ctx, chunk, palette)
             im = Image.frombytes('RGB', (wl_pic.width, wl_pic.height), bytes(buf), 'raw')
             im.save(pics_path / f"{chunk - 3}_{name}.png")
 
         elif chunk == 135: # TILE8
-            tile8 = File_VGA_ReadChunk(ctx, chunk)
-            with open(f"vga/{name}.bin", 'wb') as fp:
-                fp.write(tile8)
+            buf = File_VGA_ReadChunk(ctx, chunk)
+            v = memoryview(buf)
+            for tile in range(0, 35): #define NUMTILE8 35
+                tile_buf = deplane(v[64 * tile:64 * tile + 64], 8, 8, palette)
+                im = Image.frombytes('RGB', (8, 8), bytes(tile_buf), 'raw')
+                im.save(tile8_path / f"{tile}.png")
 
         elif 136 <= chunk <= 137: # endscreens
             endscreen = File_VGA_ReadChunk(ctx, chunk)
