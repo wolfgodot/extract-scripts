@@ -9,6 +9,10 @@ from PIL import Image
 
 from palette import WolfPal, SodPal
 
+@dataclass
+class wl_picture:
+    width: int
+    height: int
 
 @dataclass
 class VF_Struct:
@@ -17,7 +21,7 @@ class VF_Struct:
     DictName: str = ""
     FileName: str = ""
     offset: List[int] = field(default_factory=list)
-    pictable: List[dict] = field(default_factory=list)  # List of dicts with width/height
+    pictable: List[wl_picture] = field(default_factory=list)
     hufftable: List[tuple[int, int]] = field(default_factory=list)
 
 VgaFiles = VF_Struct()
@@ -111,15 +115,12 @@ def File_VGA_ReadChunk(n):
 def File_VGA_ReadPic(chunk):
     global VgaFiles
 
-    pic = {}
-
     picnum = chunk - 3
     if picnum < 0:
         return None
 
-    width = VgaFiles.pictable[picnum]['width']
-    height = VgaFiles.pictable[picnum]['height']
-    if width < 1 or width > 320 or height < 1 or height > 200:
+    wl_pic = VgaFiles.pictable[picnum]
+    if wl_pic.width < 1 or wl_pic.width > 320 or wl_pic.height < 1 or wl_pic.height > 200:
         return None  # Not a picture
 
     buf = File_VGA_ReadChunk(chunk)
@@ -129,9 +130,7 @@ def File_VGA_ReadPic(chunk):
 
     buf1 = bytearray(len(buf))
 
-    width = VgaFiles.pictable[picnum]['width']
-    height = VgaFiles.pictable[picnum]['height']
-    hw = width * height
+    hw = wl_pic.width * wl_pic.height
     quarter = hw // 4
 
     # Reorganize the planar data
@@ -139,17 +138,15 @@ def File_VGA_ReadPic(chunk):
         buf1[n] = buf[(n % 4) * quarter + n // 4]
 
     # Convert to RGB data
-    pic['width'] = width
-    pic['height'] = height
-    pic['data'] = bytearray(hw * 3)
+    buf2 = bytearray(hw * 3)
 
     for n in range(hw):
         color_idx = buf1[n]
-        pic['data'][n * 3 + 0] = WolfPal[color_idx][0]
-        pic['data'][n * 3 + 1] = WolfPal[color_idx][1]
-        pic['data'][n * 3 + 2] = WolfPal[color_idx][2]
+        buf2[n * 3 + 0] = WolfPal[color_idx][0]
+        buf2[n * 3 + 1] = WolfPal[color_idx][1]
+        buf2[n * 3 + 2] = WolfPal[color_idx][2]
 
-    return pic
+    return wl_pic, buf2
 
 
 def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
@@ -200,7 +197,7 @@ def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
     for i in range(VgaFiles.TotalChunks):
         width = struct.unpack('<H', picdef[i * 4:i * 4 + 2])[0]
         height = struct.unpack('<H', picdef[i * 4 + 2:i * 4 + 4])[0]
-        VgaFiles.pictable.append({'width': width, 'height': height})
+        VgaFiles.pictable.append(wl_picture(width, height))
 
     print("FileIO: VGA graphics files")
     print(f"-> dict: {dict_path}")
@@ -234,9 +231,9 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                 fp.write(font)
 
         elif 3 <= chunk <= 134: # pictures
-            pic = File_VGA_ReadPic(chunk)
-            im = Image.frombytes('RGB', (pic['width'], pic['height']), bytes(pic['data']), 'raw')
-            im.save(f"vga/pics/{chunk -3}_{name}.png")
+            wl_pic, buf = File_VGA_ReadPic(chunk)
+            im = Image.frombytes('RGB', (wl_pic.width, wl_pic.height), bytes(buf), 'raw')
+            im.save(f"vga/pics/{chunk - 3}_{name}.png")
 
         elif chunk == 135: # TILE8
             tile8 = File_VGA_ReadChunk(chunk)
