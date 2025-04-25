@@ -73,8 +73,11 @@ def extract_maps(maphead_path: Path, gamemaps_path: Path):
     print("FileIO: Map Files")
 
     # Create output directories
-    Path("maps/thumbs").mkdir(parents=True, exist_ok=True)
-    Path("maps/json").mkdir(parents=True, exist_ok=True)
+    thumb_path = Path("maps/thumbs")
+    thumb_path.mkdir(parents=True, exist_ok=True)
+
+    json_path = Path("maps/json")
+    json_path.mkdir(parents=True, exist_ok=True)
 
     map_offsets = []
     with open(maphead_path, "rb") as mh:
@@ -131,11 +134,11 @@ def extract_maps(maphead_path: Path, gamemaps_path: Path):
             else:
                 combined = base
 
-            Image.fromarray(combined, "RGB").save(f"maps/thumbs/{level}_{name}.png")
+            Image.fromarray(combined, "RGB").save(thumb_path / f"{level}_{name}.png")
 
             grid = [layer1[y * 64:(y + 1) * 64] for y in range(64)]
 
-            with open(f"maps/json/{level}_{name}.json", "w") as f:
+            with open(json_path / f"{level}_{name}.json", "w") as f:
                 json.dump(grid, f)
 
     return 1

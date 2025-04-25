@@ -204,11 +204,20 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
         sys.exit(1)
 
     # Create output directories
-    Path("vga/fonts").mkdir(parents=True, exist_ok=True)
-    Path("vga/pics").mkdir(parents=True, exist_ok=True)
-    Path("vga/endscreens").mkdir(parents=True, exist_ok=True)
-    Path("vga/demos").mkdir(parents=True, exist_ok=True)
-    Path("vga/endarts").mkdir(parents=True, exist_ok=True)
+    font_path = Path("vga/fonts")
+    font_path.mkdir(parents=True, exist_ok=True)
+
+    pics_path = Path("vga/pics")
+    pics_path.mkdir(parents=True, exist_ok=True)
+
+    endscreens_path = Path("vga/endscreens")
+    endscreens_path.mkdir(parents=True, exist_ok=True)
+
+    demos_path = Path("vga/demos")
+    demos_path.mkdir(parents=True, exist_ok=True)
+
+    endarts_path = Path("vga/endarts")
+    endarts_path.mkdir(parents=True, exist_ok=True)
 
     # Extract everything (hardcoded indexes based on vgapics.h, tested only with WL6)
     for chunk in range(0, ctx.TotalChunks):
@@ -216,13 +225,13 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
         if 1 <= chunk <= 2: # fonts
             font = File_VGA_ReadChunk(ctx, chunk)
-            with open(f"vga/fonts/{chunk - 1}.bin", 'wb') as fp:
+            with open(font_path / f"{chunk - 1}.bin", 'wb') as fp:
                 fp.write(font)
 
         elif 3 <= chunk <= 134: # pictures
             wl_pic, buf = File_VGA_ReadPic(ctx, chunk)
             im = Image.frombytes('RGB', (wl_pic.width, wl_pic.height), bytes(buf), 'raw')
-            im.save(f"vga/pics/{chunk - 3}_{name}.png")
+            im.save(pics_path / f"{chunk - 3}_{name}.png")
 
         elif chunk == 135: # TILE8
             tile8 = File_VGA_ReadChunk(ctx, chunk)
@@ -231,17 +240,17 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
         elif 136 <= chunk <= 137: # endscreens
             endscreen = File_VGA_ReadChunk(ctx, chunk)
-            with open(f"vga/endscreens/{name}.bin", 'wb') as fp:
+            with open(endscreens_path / f"{name}.bin", 'wb') as fp:
                 fp.write(endscreen)
 
         elif chunk == 138 or (143 <= chunk <= 148): # endarts
             endart = File_VGA_ReadChunk(ctx, chunk)
-            with open(f"vga/endarts/{name}.txt", 'wb') as fp:
+            with open(endarts_path / f"{name}.txt", 'wb') as fp:
                 fp.write(endart)
 
         elif 139 <= chunk <= 148:
             demo = File_VGA_ReadChunk(ctx, chunk)
-            with open(f"vga/demos/{name}.bin", 'wb') as fp:
+            with open(demos_path / f"{name}.bin", 'wb') as fp:
                 fp.write(demo)
 
 

@@ -179,9 +179,14 @@ def extract_vswap(vswap_path):
     spear = True if vswap_path.suffix.lower() == ".sod" else False
     palette = SodPal if spear else WolfPal
 
-    Path("vswap/walls").mkdir(parents=True, exist_ok=True)
-    Path("vswap/sprites").mkdir(parents=True, exist_ok=True)
-    Path("vswap/digisounds").mkdir(parents=True, exist_ok=True)
+    walls_path = Path("vswap/walls")
+    walls_path.mkdir(parents=True, exist_ok=True)
+
+    sprites_path = Path("vswap/sprites")
+    sprites_path.mkdir(parents=True, exist_ok=True)
+
+    digisounds_path = Path("vswap/digisounds")
+    digisounds_path.mkdir(parents=True, exist_ok=True)
 
     if not os.path.isfile(vswap_path):
         print(f"Error: Input file not found: {vswap_path}")
@@ -196,7 +201,7 @@ def extract_vswap(vswap_path):
         if File_PML_LoadWall(ctx, i, block, palette):
             im = Image.frombytes('RGB', (64, 64), block, 'raw')
             idx, shaded = divmod(i, 2)  # every second texture is a shaded variant
-            im.save(f"vswap/walls/{idx}.png" if shaded == 0 else f"vswap/walls/{idx}_shaded.png")
+            im.save(walls_path / f"{idx}.png" if shaded == 0 else walls_path / f"{idx}_shaded.png")
         else:
             print(f"Failed to load wall {i}.")
 
@@ -205,7 +210,7 @@ def extract_vswap(vswap_path):
         if File_PML_LoadSprite(ctx, i, block, palette):
             im = Image.frombytes('RGBA', (64, 64), block, 'raw')
             shapenum = i - ctx.SpriteStart
-            im.save(f"vswap/sprites/{shapenum}_{GetSpriteName(shapenum, spear=spear)}.png")
+            im.save(sprites_path / f"{shapenum}_{GetSpriteName(shapenum, spear=spear)}.png")
         else:
             print(f"Failed to load sprite {i}.")
 
@@ -215,7 +220,7 @@ def extract_vswap(vswap_path):
         print("Failed to load digimap page.")
         sys.exit(1)
 
-    with open("vswap/digisounds/digimap.bin", "wb") as digimap_file:
+    with open(digisounds_path / "digimap.bin", "wb") as digimap_file:
         digimap_file.write(digimap)
 
     for i in range(ctx.SoundStart, digimap_n):
@@ -223,7 +228,7 @@ def extract_vswap(vswap_path):
         soundnum = i - ctx.SoundStart
         if not File_PML_ReadPage(ctx, i, block):
             print(f"Failed to load sound {soundnum}.")
-        with open(f"vswap/digisounds/{soundnum}.bin", "wb") as sound_file:
+        with open(digisounds_path / f"{soundnum}.bin", "wb") as sound_file:
             sound_file.write(block)
 
 # TODO: cache lookup table!
