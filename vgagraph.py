@@ -143,9 +143,9 @@ def File_VGA_ReadPic(chunk):
 
     for n in range(hw):
         color_idx = buf1[n]
-        pic['data'][n * 3 + 0] = WolfPal[color_idx]['r']
-        pic['data'][n * 3 + 1] = WolfPal[color_idx]['g']
-        pic['data'][n * 3 + 2] = WolfPal[color_idx]['b']
+        pic['data'][n * 3 + 0] = WolfPal[color_idx][0]
+        pic['data'][n * 3 + 1] = WolfPal[color_idx][1]
+        pic['data'][n * 3 + 2] = WolfPal[color_idx][2]
 
     return pic
 

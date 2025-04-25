@@ -1,10 +1,9 @@
 def RGB(r, g, b):
-    return {
-        'r': r * 255 // 63,
-        'g': g * 255 // 63,
-        'b': b * 255 // 63,
-        'a': 0
-    }
+    return [
+        r * 255 // 63,
+        g * 255 // 63,
+        b * 255 // 63,
+    ]
 
 # wolfpal.inc
 WolfPal = [

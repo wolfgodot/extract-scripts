@@ -47,14 +47,14 @@ def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
                         if 0 <= u < w and 0 <= v < h:
                             i = ssrc[v * w + u]
                             if i != 255:
-                                r += pal[i * 3 + 0]
-                                g += pal[i * 3 + 1]
-                                b += pal[i * 3 + 2]
+                                r += pal[i][0]
+                                g += pal[i][1]
+                                b += pal[i][2]
                                 c += 1
                 c = max(c, 1)
                 dst.extend([r // c, g // c, b // c, 0])
             else:
-                dst.extend([pal[srcp * 3 + 0], pal[srcp * 3 + 1], pal[srcp * 3 + 2]])
+                dst.extend([pal[srcp][0], pal[srcp][1], pal[srcp][2]])
                 if transparent:
                     dst.append(255)
 
@@ -125,9 +125,9 @@ def File_PML_LoadWall(n, block, palette=WolfPal):
         for y in range(64):
             val = data[(x << 6) + y]
             idx = ((y << 6) + x) * 3
-            block[idx + 0] = palette[val]['r']
-            block[idx + 1] = palette[val]['g']
-            block[idx + 2] = palette[val]['b']
+            block[idx + 0] = palette[val][0]
+            block[idx + 1] = palette[val][1]
+            block[idx + 2] = palette[val][2]
     return 1
 
 
@@ -174,15 +174,8 @@ def File_PML_LoadSprite(n, block, palette=WolfPal):
     # Clear block before expanding palette
     block.clear()
 
-    # Convert palette to flat RGB list
-    flat_pal = []
-    for color in WolfPal:
-        flat_pal.append(color['r'])
-        flat_pal.append(color['g'])
-        flat_pal.append(color['b'])
-
     # Now expand the palette
-    Img_ExpandPalette(block, tmp, 64, 64, flat_pal, True)
+    Img_ExpandPalette(block, tmp, 64, 64, palette, True)
 
     return 1
 
