@@ -256,4 +256,3 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
             demo = File_VGA_ReadChunk(ctx, chunk)
             with open(demos_path / f"{name}.bin", 'wb') as fp:
                 fp.write(demo)
-
