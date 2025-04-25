@@ -6,6 +6,7 @@ from pathlib import Path
 from gamemaps import extract_maps
 from vgagraph import extract_vga
 from vswap import extract_vswap
+from signon import extract_signon
 
 def main():
     parser = argparse.ArgumentParser(description="Extract Wolfenstein3D assets")
@@ -18,6 +19,8 @@ def main():
     extract_vswap(input_path / "VSWAP.WL6")
     print()
     extract_vga(input_path / "VGADICT.WL6", input_path / "VGAHEAD.WL6", input_path / "VGAGRAPH.WL6")
+    print()
+    extract_signon(sod=False)
 
             
 if __name__ == "__main__":
