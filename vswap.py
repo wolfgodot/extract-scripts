@@ -8,6 +8,7 @@ from typing import List
 from PIL import Image
 
 from palette import WolfPal, SodPal
+from version_defs import gen_vswap_lookup_table
 
 @dataclass
 class Shape:
@@ -27,6 +28,7 @@ class VSwapContext:
     SoundStart: int = 0
     Pages: List[Chunk] = field(default_factory=list)
     FileName: Path = Path()
+    names: List[str] = field(default_factory=list)
 
 
 def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
@@ -174,9 +176,11 @@ def File_PML_LoadSprite(ctx: VSwapContext, n, block, palette=WolfPal):
 
 
 def extract_vswap(vswap_path):
-    ctx = VSwapContext()
-
     spear = True if vswap_path.suffix.lower() == ".sod" else False
+
+    ctx = VSwapContext()
+    ctx.names = gen_vswap_lookup_table(spear=spear)
+
     palette = SodPal if spear else WolfPal
 
     walls_path = Path("vswap/walls")
@@ -210,7 +214,7 @@ def extract_vswap(vswap_path):
         if File_PML_LoadSprite(ctx, i, block, palette):
             im = Image.frombytes('RGBA', (64, 64), block, 'raw')
             shapenum = i - ctx.SpriteStart
-            im.save(sprites_path / f"{shapenum}_{GetSpriteName(shapenum, spear=spear)}.png")
+            im.save(sprites_path / f"{shapenum}_{ctx.names[shapenum]}.png")
         else:
             print(f"Failed to load sprite {i}.")
 
@@ -230,246 +234,3 @@ def extract_vswap(vswap_path):
             print(f"Failed to load sound {soundnum}.")
         with open(digisounds_path / f"{soundnum}.bin", "wb") as sound_file:
             sound_file.write(block)
-
-# TODO: cache lookup table!
-def GetSpriteName(shapenum, apogee_1_0=False, apogee_1_1=False, spear=False, upload=False):
-    sprite_names = []
-
-    # Basic mapping that's always present
-    sprite_names.append("SPR_DEMO")
-
-    if not apogee_1_0:
-        sprite_names.append("SPR_DEATHCAM")
-
-    # Static sprites (0-47)
-    for i in range(48):
-        sprite_names.append(f"SPR_STAT_{i}")
-
-    if spear:
-        # Additional static sprites for SPEAR
-        for i in range(48, 52):
-            sprite_names.append(f"SPR_STAT_{i}")
-
-    # Guard sprites
-    for suffix in ["S", "W1", "W2", "W3", "W4"]:
-        for i in range(1, 9):
-            sprite_names.append(f"SPR_GRD_{suffix}_{i}")
-
-    sprite_names.extend([
-        "SPR_GRD_PAIN_1", "SPR_GRD_DIE_1", "SPR_GRD_DIE_2", "SPR_GRD_DIE_3",
-        "SPR_GRD_PAIN_2", "SPR_GRD_DEAD", "SPR_GRD_SHOOT1", "SPR_GRD_SHOOT2", "SPR_GRD_SHOOT3"
-    ])
-
-    # Dog sprites
-    for suffix in ["W1", "W2", "W3", "W4"]:
-        for i in range(1, 9):
-            sprite_names.append(f"SPR_DOG_{suffix}_{i}")
-
-    sprite_names.extend([
-        "SPR_DOG_DIE_1", "SPR_DOG_DIE_2", "SPR_DOG_DIE_3", "SPR_DOG_DEAD",
-        "SPR_DOG_JUMP1", "SPR_DOG_JUMP2", "SPR_DOG_JUMP3"
-    ])
-
-    # SS sprites
-    for suffix in ["S", "W1", "W2", "W3", "W4"]:
-        for i in range(1, 9):
-            sprite_names.append(f"SPR_SS_{suffix}_{i}")
-
-    sprite_names.extend([
-        "SPR_SS_PAIN_1", "SPR_SS_DIE_1", "SPR_SS_DIE_2", "SPR_SS_DIE_3",
-        "SPR_SS_PAIN_2", "SPR_SS_DEAD", "SPR_SS_SHOOT1", "SPR_SS_SHOOT2", "SPR_SS_SHOOT3"
-    ])
-
-    # Mutant sprites
-    for suffix in ["S", "W1", "W2", "W3", "W4"]:
-        for i in range(1, 9):
-            sprite_names.append(f"SPR_MUT_{suffix}_{i}")
-
-    sprite_names.extend([
-        "SPR_MUT_PAIN_1", "SPR_MUT_DIE_1", "SPR_MUT_DIE_2", "SPR_MUT_DIE_3",
-        "SPR_MUT_PAIN_2", "SPR_MUT_DIE_4", "SPR_MUT_DEAD",
-        "SPR_MUT_SHOOT1", "SPR_MUT_SHOOT2", "SPR_MUT_SHOOT3", "SPR_MUT_SHOOT4"
-    ])
-
-    # Officer sprites
-    for suffix in ["S", "W1", "W2", "W3", "W4"]:
-        for i in range(1, 9):
-            sprite_names.append(f"SPR_OFC_{suffix}_{i}")
-
-    sprite_names.extend([
-        "SPR_OFC_PAIN_1", "SPR_OFC_DIE_1", "SPR_OFC_DIE_2", "SPR_OFC_DIE_3",
-        "SPR_OFC_PAIN_2", "SPR_OFC_DIE_4", "SPR_OFC_DEAD",
-        "SPR_OFC_SHOOT1", "SPR_OFC_SHOOT2", "SPR_OFC_SHOOT3"
-    ])
-
-    if not spear:
-        # Ghosts
-        sprite_names.extend([
-            "SPR_BLINKY_W1", "SPR_BLINKY_W2", "SPR_PINKY_W1", "SPR_PINKY_W2",
-            "SPR_CLYDE_W1", "SPR_CLYDE_W2", "SPR_INKY_W1", "SPR_INKY_W2"
-        ])
-
-        # Hans
-        sprite_names.extend([
-            "SPR_BOSS_W1", "SPR_BOSS_W2", "SPR_BOSS_W3", "SPR_BOSS_W4",
-            "SPR_BOSS_SHOOT1", "SPR_BOSS_SHOOT2", "SPR_BOSS_SHOOT3", "SPR_BOSS_DEAD",
-            "SPR_BOSS_DIE1", "SPR_BOSS_DIE2", "SPR_BOSS_DIE3"
-        ])
-
-        # Schabbs
-        sprite_names.extend([
-            "SPR_SCHABB_W1", "SPR_SCHABB_W2", "SPR_SCHABB_W3", "SPR_SCHABB_W4",
-            "SPR_SCHABB_SHOOT1", "SPR_SCHABB_SHOOT2", "SPR_SCHABB_DIE1", "SPR_SCHABB_DIE2",
-            "SPR_SCHABB_DIE3", "SPR_SCHABB_DEAD", "SPR_HYPO1", "SPR_HYPO2", "SPR_HYPO3", "SPR_HYPO4"
-        ])
-
-        # Fake
-        sprite_names.extend([
-            "SPR_FAKE_W1", "SPR_FAKE_W2", "SPR_FAKE_W3", "SPR_FAKE_W4",
-            "SPR_FAKE_SHOOT", "SPR_FIRE1", "SPR_FIRE2", "SPR_FAKE_DIE1", "SPR_FAKE_DIE2",
-            "SPR_FAKE_DIE3", "SPR_FAKE_DIE4", "SPR_FAKE_DIE5", "SPR_FAKE_DEAD"
-        ])
-
-        # Hitler
-        sprite_names.extend([
-            "SPR_MECHA_W1", "SPR_MECHA_W2", "SPR_MECHA_W3", "SPR_MECHA_W4",
-            "SPR_MECHA_SHOOT1", "SPR_MECHA_SHOOT2", "SPR_MECHA_SHOOT3", "SPR_MECHA_DEAD",
-            "SPR_MECHA_DIE1", "SPR_MECHA_DIE2", "SPR_MECHA_DIE3", "SPR_HITLER_W1",
-            "SPR_HITLER_W2", "SPR_HITLER_W3", "SPR_HITLER_W4", "SPR_HITLER_SHOOT1",
-            "SPR_HITLER_SHOOT2", "SPR_HITLER_SHOOT3", "SPR_HITLER_DEAD", "SPR_HITLER_DIE1",
-            "SPR_HITLER_DIE2", "SPR_HITLER_DIE3", "SPR_HITLER_DIE4", "SPR_HITLER_DIE5",
-            "SPR_HITLER_DIE6", "SPR_HITLER_DIE7", "SPR_GIFT_W1", "SPR_GIFT_W2",
-            "SPR_GIFT_W3", "SPR_GIFT_W4", "SPR_GIFT_SHOOT1", "SPR_GIFT_SHOOT2",
-            "SPR_GIFT_DIE1", "SPR_GIFT_DIE2", "SPR_GIFT_DIE3", "SPR_GIFT_DEAD"
-        ])
-
-    # Rocket, smoke and explosion
-    for i in range(1, 9):
-        sprite_names.append(f"SPR_ROCKET_{i}")
-
-    for i in range(1, 5):
-        sprite_names.append(f"SPR_SMOKE_{i}")
-
-    for i in range(1, 4):
-        sprite_names.append(f"SPR_BOOM_{i}")
-
-    if spear:
-        # Additional rocket/smoke/boom for SPEAR
-        for i in range(1, 9):
-            sprite_names.append(f"SPR_HROCKET_{i}")
-
-        for i in range(1, 5):
-            sprite_names.append(f"SPR_HSMOKE_{i}")
-
-        for i in range(1, 4):
-            sprite_names.append(f"SPR_HBOOM_{i}")
-
-        for i in range(1, 5):
-            sprite_names.append(f"SPR_SPARK{i}")
-
-    if not spear:
-        # Gretel
-        sprite_names.extend([
-            "SPR_GRETEL_W1", "SPR_GRETEL_W2", "SPR_GRETEL_W3", "SPR_GRETEL_W4",
-            "SPR_GRETEL_SHOOT1", "SPR_GRETEL_SHOOT2", "SPR_GRETEL_SHOOT3", "SPR_GRETEL_DEAD",
-            "SPR_GRETEL_DIE1", "SPR_GRETEL_DIE2", "SPR_GRETEL_DIE3"
-        ])
-
-        # Fat face
-        sprite_names.extend([
-            "SPR_FAT_W1", "SPR_FAT_W2", "SPR_FAT_W3", "SPR_FAT_W4",
-            "SPR_FAT_SHOOT1", "SPR_FAT_SHOOT2", "SPR_FAT_SHOOT3", "SPR_FAT_SHOOT4",
-            "SPR_FAT_DIE1", "SPR_FAT_DIE2", "SPR_FAT_DIE3", "SPR_FAT_DEAD"
-        ])
-
-        # BJ sprites
-        if apogee_1_0:
-            sprite_names.extend([
-                "SPR_BJ_W1", "SPR_BJ_W2", "SPR_BJ_W3", "SPR_BJ_W4",
-                "SPR_BJ_JUMP1", "SPR_BJ_JUMP2", "SPR_BJ_JUMP3", "SPR_BJ_JUMP4"
-            ])
-        elif apogee_1_1 and upload:
-            # Skip to 406
-            while len(sprite_names) < 406:
-                sprite_names.append(None)
-            sprite_names.extend([
-                "SPR_BJ_W1", "SPR_BJ_W2", "SPR_BJ_W3", "SPR_BJ_W4",
-                "SPR_BJ_JUMP1", "SPR_BJ_JUMP2", "SPR_BJ_JUMP3", "SPR_BJ_JUMP4"
-            ])
-        else:
-            sprite_names.extend([
-                "SPR_BJ_W1", "SPR_BJ_W2", "SPR_BJ_W3", "SPR_BJ_W4",
-                "SPR_BJ_JUMP1", "SPR_BJ_JUMP2", "SPR_BJ_JUMP3", "SPR_BJ_JUMP4"
-            ])
-    else:
-        # SPEAR sprites
-        # Trans Grosse
-        sprite_names.extend([
-            "SPR_TRANS_W1", "SPR_TRANS_W2", "SPR_TRANS_W3", "SPR_TRANS_W4",
-            "SPR_TRANS_SHOOT1", "SPR_TRANS_SHOOT2", "SPR_TRANS_SHOOT3", "SPR_TRANS_DEAD",
-            "SPR_TRANS_DIE1", "SPR_TRANS_DIE2", "SPR_TRANS_DIE3"
-        ])
-
-        # Wilhelm
-        sprite_names.extend([
-            "SPR_WILL_W1", "SPR_WILL_W2", "SPR_WILL_W3", "SPR_WILL_W4",
-            "SPR_WILL_SHOOT1", "SPR_WILL_SHOOT2", "SPR_WILL_SHOOT3", "SPR_WILL_SHOOT4",
-            "SPR_WILL_DIE1", "SPR_WILL_DIE2", "SPR_WILL_DIE3", "SPR_WILL_DEAD"
-        ])
-
-        # UberMutant
-        sprite_names.extend([
-            "SPR_UBER_W1", "SPR_UBER_W2", "SPR_UBER_W3", "SPR_UBER_W4",
-            "SPR_UBER_SHOOT1", "SPR_UBER_SHOOT2", "SPR_UBER_SHOOT3", "SPR_UBER_SHOOT4",
-            "SPR_UBER_DIE1", "SPR_UBER_DIE2", "SPR_UBER_DIE3", "SPR_UBER_DIE4", "SPR_UBER_DEAD"
-        ])
-
-        # Death Knight
-        sprite_names.extend([
-            "SPR_DEATH_W1", "SPR_DEATH_W2", "SPR_DEATH_W3", "SPR_DEATH_W4",
-            "SPR_DEATH_SHOOT1", "SPR_DEATH_SHOOT2", "SPR_DEATH_SHOOT3", "SPR_DEATH_SHOOT4",
-            "SPR_DEATH_DIE1", "SPR_DEATH_DIE2", "SPR_DEATH_DIE3", "SPR_DEATH_DIE4",
-            "SPR_DEATH_DIE5", "SPR_DEATH_DIE6", "SPR_DEATH_DEAD"
-        ])
-
-        # Ghost
-        sprite_names.extend([
-            "SPR_SPECTRE_W1", "SPR_SPECTRE_W2", "SPR_SPECTRE_W3", "SPR_SPECTRE_W4",
-            "SPR_SPECTRE_F1", "SPR_SPECTRE_F2", "SPR_SPECTRE_F3", "SPR_SPECTRE_F4"
-        ])
-
-        # Angel of Death
-        sprite_names.extend([
-            "SPR_ANGEL_W1", "SPR_ANGEL_W2", "SPR_ANGEL_W3", "SPR_ANGEL_W4",
-            "SPR_ANGEL_SHOOT1", "SPR_ANGEL_SHOOT2", "SPR_ANGEL_TIRED1", "SPR_ANGEL_TIRED2",
-            "SPR_ANGEL_DIE1", "SPR_ANGEL_DIE2", "SPR_ANGEL_DIE3", "SPR_ANGEL_DIE4",
-            "SPR_ANGEL_DIE5", "SPR_ANGEL_DIE6", "SPR_ANGEL_DIE7", "SPR_ANGEL_DEAD"
-        ])
-
-    # Player attack frames
-    sprite_names.extend([
-        "SPR_KNIFEREADY", "SPR_KNIFEATK1", "SPR_KNIFEATK2", "SPR_KNIFEATK3", "SPR_KNIFEATK4",
-        "SPR_PISTOLREADY", "SPR_PISTOLATK1", "SPR_PISTOLATK2", "SPR_PISTOLATK3", "SPR_PISTOLATK4",
-        "SPR_MACHINEGUNREADY", "SPR_MACHINEGUNATK1", "SPR_MACHINEGUNATK2", "MACHINEGUNATK3", "SPR_MACHINEGUNATK4",
-        "SPR_CHAINREADY", "SPR_CHAINATK1", "SPR_CHAINATK2", "SPR_CHAINATK3", "SPR_CHAINATK4"
-    ])
-
-    # Handle the special case for SPR_BJ_W1
-    if apogee_1_0:
-        # Find and update SPR_BJ_W1 position
-        for i, name in enumerate(sprite_names):
-            if name == "SPR_BJ_W1":
-                # Move it to position 360
-                if i < 360:
-                    # Remove from current position and insert at 360
-                    sprite_names.pop(i)
-                    while len(sprite_names) < 360:
-                        sprite_names.append(None)
-                    sprite_names.insert(360, "SPR_BJ_W1")
-                break
-
-    # Check if shapenum is within bounds
-    if shapenum < 0 or shapenum >= len(sprite_names):
-        return None
-
-    return sprite_names[shapenum]

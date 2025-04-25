@@ -8,6 +8,7 @@ from typing import List
 from PIL import Image
 
 from palette import WolfPal, SodPal
+from version_defs import gen_vgagraph_lookup_table
 
 @dataclass
 class wl_picture:
@@ -23,6 +24,7 @@ class VGAContext:
     offset: List[int] = field(default_factory=list)
     pictable: List[wl_picture] = field(default_factory=list)
     hufftable: List[tuple[int, int]] = field(default_factory=list)
+    names: List[str] = field(default_factory=list)
 
 
 def File_HuffExpand(source, target, expanded_size, compressed_size, dictionary):
@@ -198,6 +200,7 @@ def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, v
 
 def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
     ctx = VGAContext()
+    ctx.names = gen_vgagraph_lookup_table(wl6=True)
 
     if not File_VGA_OpenVgaFiles(ctx, dict_path, header_path, vga_path):
         print("Failed to open VGA files")
@@ -221,11 +224,11 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
     # Extract everything (hardcoded indexes based on vgapics.h, tested only with WL6)
     for chunk in range(0, ctx.TotalChunks):
-        name = GetChunkName(chunk, wl6=True)
+        name = "UNKNOWN" if chunk >= len(ctx.names) else ctx.names[chunk]
 
         if 1 <= chunk <= 2: # fonts
             font = File_VGA_ReadChunk(ctx, chunk)
-            with open(font_path / f"{chunk - 1}.bin", 'wb') as fp:
+            with open(font_path / f"{name}.bin", 'wb') as fp:
                 fp.write(font)
 
         elif 3 <= chunk <= 134: # pictures
@@ -235,7 +238,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
         elif chunk == 135: # TILE8
             tile8 = File_VGA_ReadChunk(ctx, chunk)
-            with open(f"vga/tile8.bin", 'wb') as fp:
+            with open(f"vga/{name}.bin", 'wb') as fp:
                 fp.write(tile8)
 
         elif 136 <= chunk <= 137: # endscreens
@@ -253,276 +256,3 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
             with open(demos_path / f"{name}.bin", 'wb') as fp:
                 fp.write(demo)
 
-
-# TODO: cache lookup table!
-def GetChunkName(value,
-                 apogee_1_0=False,
-                 apogee_1_1=False,
-                 apogee_1_2=False,
-                 upload=False,
-                 japanese=False,
-                 sod=False,
-                 wl6=True):
-    # Common chunks that appear in multiple variants
-    common_chunks = []
-
-    # Temporarily disable WL6 if another define is active
-    if japanese or sod or apogee_1_0 or apogee_1_1 or apogee_1_2:
-        wl6 = False
-
-    # WL6 chunks
-    wl6_chunks = []
-    if wl6:
-        wl6_chunks.extend([
-            "H_BJPIC", "H_CASTLEPIC", "H_BLAZEPIC", "H_TOPWINDOWPIC",
-            "H_LEFTWINDOWPIC", "H_RIGHTWINDOWPIC", "H_BOTTOMINFOPIC"
-        ])
-        wl6_chunks.extend([
-            "C_OPTIONSPIC", "C_CURSOR1PIC", "C_CURSOR2PIC", "C_NOTSELECTEDPIC",
-            "C_SELECTEDPIC", "C_FXTITLEPIC", "C_DIGITITLEPIC", "C_MUSICTITLEPIC",
-            "C_MOUSELBACKPIC", "C_BABYMODEPIC", "C_EASYPIC", "C_NORMALPIC",
-            "C_HARDPIC", "C_LOADSAVEDISKPIC", "C_DISKLOADING1PIC", "C_DISKLOADING2PIC",
-            "C_CONTROLPIC", "C_CUSTOMIZEPIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
-            "C_EPISODE1PIC", "C_EPISODE2PIC", "C_EPISODE3PIC", "C_EPISODE4PIC",
-            "C_EPISODE5PIC", "C_EPISODE6PIC", "C_CODEPIC", "C_TIMECODEPIC",
-            "C_LEVELPIC", "C_NAMEPIC", "C_SCOREPIC", "C_JOY1PIC", "C_JOY2PIC"
-        ])
-        wl6_chunks.extend([
-            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
-            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
-            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
-            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
-            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
-            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
-            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
-            "L_EXPOINTPIC", "L_APOSTROPHEPIC", "L_GUY2PIC", "L_BJWINSPIC",
-            "STATUSBARPIC", "TITLEPIC", "PG13PIC", "CREDITSPIC", "HIGHSCORESPIC"
-        ])
-        wl6_chunks.extend([
-            "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC", "GATLINGGUNPIC", "NOKEYPIC",
-            "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC", "N_0PIC", "N_1PIC",
-            "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC", "N_7PIC",
-            "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
-            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
-            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
-            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
-            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
-            "MUTANTBJPIC", "PAUSEDPIC", "GETPSYCHEDPIC"
-        ])
-        wl6_chunks.append("TILE8")
-        wl6_chunks.extend([
-            "ORDERSCREEN", "ERRORSCREEN", "T_HELPART", "T_DEMO0", "T_DEMO1",
-            "T_DEMO2", "T_DEMO3", "T_ENDART1", "T_ENDART2", "T_ENDART3",
-            "T_ENDART4", "T_ENDART5", "T_ENDART6"
-        ])
-
-    # JAPANESE chunks
-    japanese_chunks = []
-    if japanese:
-        japanese_chunks.extend([
-            "H_HELP1PIC", "H_HELP2PIC", "H_HELP3PIC", "H_HELP4PIC", "H_HELP5PIC",
-            "H_HELP6PIC", "H_HELP7PIC", "H_HELP8PIC", "H_HELP9PIC", "H_HELP10PIC"
-        ])
-        japanese_chunks.extend([
-            "C_OPTIONSPIC", "C_CURSOR1PIC", "C_CURSOR2PIC", "C_NOTSELECTEDPIC",
-            "C_SELECTEDPIC", "C_MOUSELBACKPIC", "C_BABYMODEPIC", "C_EASYPIC",
-            "C_NORMALPIC", "C_HARDPIC", "C_LOADSAVEDISKPIC", "C_DISKLOADING1PIC",
-            "C_DISKLOADING2PIC", "C_CONTROLPIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
-            "C_EPISODE1PIC", "C_EPISODE2PIC", "C_EPISODE3PIC", "C_EPISODE4PIC",
-            "C_EPISODE5PIC", "C_EPISODE6PIC", "C_CODEPIC", "C_TIMECODEPIC",
-            "C_LEVELPIC", "C_NAMEPIC", "C_SCOREPIC", "C_JOY1PIC", "C_JOY2PIC",
-            "C_QUITMSGPIC", "C_JAPQUITPIC", "C_UNUSED_LOADING", "C_JAPNEWGAMEPIC",
-            "C_JAPSAVEOVERPIC", "C_MSCORESPIC", "C_MENDGAMEPIC", "C_MRETDEMOPIC",
-            "C_MRETGAMEPIC", "C_INTERMISSIONPIC", "C_LETSSEEPIC", "C_ENDRATIOSPIC",
-            "C_ENDGAME1APIC", "C_ENDGAME1BPIC", "C_ENDGAME2APIC", "C_ENDGAME2BPIC",
-            "C_ENDGAME3APIC", "C_ENDGAME3BPIC", "C_ENDGAME4APIC", "C_ENDGAME4BPIC",
-            "C_ENDGAME5APIC", "C_ENDGAME5BPIC", "C_ENDGAME6APIC", "C_ENDGAME6BPIC"
-        ])
-        japanese_chunks.extend([
-            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
-            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
-            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
-            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
-            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
-            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
-            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
-            "L_EXPOINTPIC", "L_APOSTROPHEPIC", "L_GUY2PIC", "L_BJWINSPIC",
-            "STATUSBARPIC", "TITLEPIC"
-        ])
-        japanese_chunks.extend([
-            "S_MOUSESENSPIC", "S_OPTIONSPIC", "S_SOUNDPIC", "S_SKILLPIC",
-            "S_EPISODEPIC", "S_CHANGEPIC", "S_CUSTOMPIC", "S_CONTROLPIC",
-            "CREDITSPIC", "HIGHSCORESPIC"
-        ])
-        japanese_chunks.extend([
-            "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC", "GATLINGGUNPIC", "NOKEYPIC",
-            "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC", "N_0PIC", "N_1PIC",
-            "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC", "N_7PIC",
-            "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
-            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
-            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
-            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
-            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
-            "MUTANTBJPIC", "PAUSEDPIC", "GETPSYCHEDPIC", "TILE8"
-        ])
-        japanese_chunks.extend([
-            "ERRORSCREEN", "T_DEMO0", "T_DEMO1", "T_DEMO2", "T_DEMO3"
-        ])
-
-    # SOD chunks
-    sod_chunks = []
-    if sod:
-        sod_chunks.extend([
-            "C_BACKDROPPIC", "C_MOUSELBACKPIC", "C_CURSOR1PIC", "C_CURSOR2PIC",
-            "C_NOTSELECTEDPIC", "C_SELECTEDPIC", "C_CUSTOMIZEPIC", "C_JOY1PIC",
-            "C_JOY2PIC", "C_MOUSEPIC", "C_JOYSTICKPIC", "C_KEYBOARDPIC", "C_CONTROLPIC",
-            "C_OPTIONSPIC", "C_FXTITLEPIC", "C_DIGITITLEPIC", "C_MUSICTITLEPIC",
-            "C_HOWTOUGHPIC", "C_BABYMODEPIC", "C_EASYPIC", "C_NORMALPIC", "C_HARDPIC",
-            "C_DISKLOADING1PIC", "C_DISKLOADING2PIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
-            "HIGHSCORESPIC", "C_WONSPEARPIC"
-        ])
-        # Skip SPEARDEMO defines
-        sod_chunks.extend([
-            "BJCOLLAPSE1PIC", "BJCOLLAPSE2PIC", "BJCOLLAPSE3PIC", "BJCOLLAPSE4PIC", "ENDPICPIC"
-        ])
-        sod_chunks.extend([
-            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
-            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
-            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
-            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
-            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
-            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
-            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
-            "L_EXPOINTPIC", "L_APOSTROPHEPIC", "L_GUY2PIC", "L_BJWINSPIC",
-            "TITLE1PIC", "TITLE2PIC"
-        ])
-        # Skip SPEARDEMO defines
-        sod_chunks.extend([
-            "ENDSCREEN11PIC", "ENDSCREEN12PIC", "ENDSCREEN3PIC", "ENDSCREEN4PIC",
-            "ENDSCREEN5PIC", "ENDSCREEN6PIC", "ENDSCREEN7PIC", "ENDSCREEN8PIC", "ENDSCREEN9PIC"
-        ])
-        sod_chunks.extend([
-            "STATUSBARPIC", "PG13PIC", "CREDITSPIC"
-        ])
-        # Skip SPEARDEMO defines
-        sod_chunks.extend([
-            "IDGUYS1PIC", "IDGUYS2PIC", "COPYPROTTOPPIC", "COPYPROTBOXPIC",
-            "BOSSPIC1PIC", "BOSSPIC2PIC", "BOSSPIC3PIC", "BOSSPIC4PIC"
-        ])
-        sod_chunks.extend([
-            "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC", "GATLINGGUNPIC", "NOKEYPIC",
-            "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC", "N_0PIC", "N_1PIC",
-            "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC", "N_7PIC",
-            "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
-            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
-            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
-            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
-            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
-            "GODMODEFACE1PIC", "GODMODEFACE2PIC", "GODMODEFACE3PIC", "BJWAITING1PIC",
-            "BJWAITING2PIC", "BJOUCHPIC", "PAUSEDPIC", "GETPSYCHEDPIC", "TILE8",
-            "ORDERSCREEN", "ERRORSCREEN", "TITLEPALETTE"
-        ])
-        # Skip SPEARDEMO defines
-        sod_chunks.extend([
-            "END1PALETTE", "END2PALETTE", "END3PALETTE", "END4PALETTE",
-            "END5PALETTE", "END6PALETTE", "END7PALETTE", "END8PALETTE",
-            "END9PALETTE", "IDGUYSPALETTE"
-        ])
-        sod_chunks.extend(["T_DEMO0"])
-        # Skip SPEARDEMO defines
-        sod_chunks.extend([
-            "T_DEMO1", "T_DEMO2", "T_DEMO3", "T_ENDART1"
-        ])
-
-    # DEFAULT chunks (when none of the other defines are active)
-    default_chunks = []
-    if not (wl6 or japanese or sod):
-        default_chunks.extend([
-            "H_BJPIC", "H_CASTLEPIC", "H_KEYBOARDPIC", "H_JOYPIC", "H_HEALPIC",
-            "H_TREASUREPIC", "H_GUNPIC", "H_KEYPIC", "H_BLAZEPIC", "H_WEAPON1234PIC",
-            "H_WOLFLOGOPIC", "H_VISAPIC", "H_MCPIC", "H_IDLOGOPIC", "H_TOPWINDOWPIC",
-            "H_LEFTWINDOWPIC", "H_RIGHTWINDOWPIC", "H_BOTTOMINFOPIC"
-        ])
-
-        # Special case for APOGEE versions
-        if not (apogee_1_0 or apogee_1_1 or apogee_1_2):
-            default_chunks.append("H_SPEARADPIC")
-
-        default_chunks.extend([
-            "C_OPTIONSPIC", "C_CURSOR1PIC", "C_CURSOR2PIC", "C_NOTSELECTEDPIC",
-            "C_SELECTEDPIC", "C_FXTITLEPIC", "C_DIGITITLEPIC", "C_MUSICTITLEPIC",
-            "C_MOUSELBACKPIC", "C_BABYMODEPIC", "C_EASYPIC", "C_NORMALPIC",
-            "C_HARDPIC", "C_LOADSAVEDISKPIC", "C_DISKLOADING1PIC", "C_DISKLOADING2PIC",
-            "C_CONTROLPIC", "C_CUSTOMIZEPIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
-            "C_EPISODE1PIC", "C_EPISODE2PIC", "C_EPISODE3PIC", "C_EPISODE4PIC",
-            "C_EPISODE5PIC", "C_EPISODE6PIC", "C_CODEPIC"
-        ])
-
-        # Special handling for APOGEE_1_0
-        if apogee_1_0:
-            default_chunks.append("C_TIMECODEPIC")  # Same as C_CODEPIC
-        else:
-            default_chunks.extend(["C_TIMECODEPIC", "C_LEVELPIC", "C_NAMEPIC", "C_SCOREPIC"])
-            # Special case for apogee 1.1 and 1.2
-            if not (apogee_1_1 or apogee_1_2):
-                default_chunks.extend(["C_JOY1PIC", "C_JOY2PIC"])
-
-        default_chunks.extend([
-            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
-            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
-            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
-            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
-            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
-            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
-            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
-            "L_EXPOINTPIC"
-        ])
-
-        # Special handling for APOGEE_1_0
-        if not apogee_1_0:
-            default_chunks.append("L_APOSTROPHEPIC")
-
-        default_chunks.extend([
-            "L_GUY2PIC", "L_BJWINSPIC", "STATUSBARPIC", "TITLEPIC", "PG13PIC",
-            "CREDITSPIC", "HIGHSCORESPIC", "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC",
-            "GATLINGGUNPIC", "NOKEYPIC", "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC",
-            "N_0PIC", "N_1PIC", "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC",
-            "N_7PIC", "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
-            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
-            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
-            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
-            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
-            "MUTANTBJPIC", "PAUSEDPIC", "GETPSYCHEDPIC", "TILE8", "ORDERSCREEN",
-            "ERRORSCREEN", "T_HELPART"
-        ])
-
-        # Special handling for APOGEE_1_0
-        if apogee_1_0:
-            default_chunks.append("T_ENDART1")
-
-        default_chunks.extend(["T_DEMO0", "T_DEMO1", "T_DEMO2", "T_DEMO3"])
-
-        # Special handling for APOGEE and UPLOAD
-        if not apogee_1_0:
-            default_chunks.append("T_ENDART1")
-            if not upload:
-                default_chunks.extend(["T_ENDART2", "T_ENDART3", "T_ENDART4", "T_ENDART5", "T_ENDART6"])
-
-    # Use the appropriate chunk list based on the configuration
-    chunks = []
-    if wl6:
-        chunks = wl6_chunks
-    elif japanese:
-        chunks = japanese_chunks
-    elif sod:
-        chunks = sod_chunks
-    else:
-        chunks = default_chunks
-
-    # Adjust for base value (enums start at index 3)
-    if 3 <= value < len(chunks) + 3:
-        return chunks[value - 3]
-    elif value == len(chunks) + 3:
-        return "ENUMEND"
-    else:
-        return None
