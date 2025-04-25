@@ -155,6 +155,7 @@ class Shape:
 
 PageFile = PF_Struct()
 
+# TODO: cache lookup table!
 def GetSpriteName(shapenum, apogee_1_0=False, apogee_1_1=False, spear=False, upload=False):
     sprite_names = []
 
@@ -430,7 +431,7 @@ def File_PML_OpenPageFile(filename: Path):
             header = fp.read(6)
             PageFile.ChunksInFile, PageFile.SpriteStart, PageFile.SoundStart = struct.unpack('<HHH', header)
 
-            print(f"-> {filename}")
+            print(f"FileIO: Page File")
             print(f"-> Total Chunks : {PageFile.ChunksInFile}")
             print(f"-> Sprites start: {PageFile.SpriteStart}")
             print(f"-> Sounds start : {PageFile.SoundStart}")
@@ -611,88 +612,333 @@ class VF_Struct:
     FileName: str = ""
     offset: List[int] = field(default_factory=list)
     pictable: List[dict] = field(default_factory=list)  # List of dicts with width/height
-    grhuffman32: List[dict] = field(default_factory=list)  # List of dicts with bit0/bit1
+    hufftable: List[tuple[int, int]] = field(default_factory=list)
 
 VgaFiles = VF_Struct()
 
-def File_HuffExpand(source, dest, length, c_len, hufftable):
-    headptr = hufftable[254]  # Head node is always node 254
-    end = length
+# TODO: cache lookup table!
+def GetChunkName(value,
+                 apogee_1_0=False,
+                 apogee_1_1=False,
+                 apogee_1_2=False,
+                 upload=False,
+                 japanese=False,
+                 sod=False,
+                 wl6=True):
+    # Common chunks that appear in multiple variants
+    common_chunks = []
 
-    node = headptr
-    if not source:
-        return
+    # Temporarily disable WL6 if another define is active
+    if japanese or sod or apogee_1_0 or apogee_1_1 or apogee_1_2:
+        wl6 = False
 
-    ch = source[0]
-    source = source[1:]
-    c_len -= 1
-    cl = 1
+    # WL6 chunks
+    wl6_chunks = []
+    if wl6:
+        wl6_chunks.extend([
+            "H_BJPIC", "H_CASTLEPIC", "H_BLAZEPIC", "H_TOPWINDOWPIC",
+            "H_LEFTWINDOWPIC", "H_RIGHTWINDOWPIC", "H_BOTTOMINFOPIC"
+        ])
+        wl6_chunks.extend([
+            "C_OPTIONSPIC", "C_CURSOR1PIC", "C_CURSOR2PIC", "C_NOTSELECTEDPIC",
+            "C_SELECTEDPIC", "C_FXTITLEPIC", "C_DIGITITLEPIC", "C_MUSICTITLEPIC",
+            "C_MOUSELBACKPIC", "C_BABYMODEPIC", "C_EASYPIC", "C_NORMALPIC",
+            "C_HARDPIC", "C_LOADSAVEDISKPIC", "C_DISKLOADING1PIC", "C_DISKLOADING2PIC",
+            "C_CONTROLPIC", "C_CUSTOMIZEPIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
+            "C_EPISODE1PIC", "C_EPISODE2PIC", "C_EPISODE3PIC", "C_EPISODE4PIC",
+            "C_EPISODE5PIC", "C_EPISODE6PIC", "C_CODEPIC", "C_TIMECODEPIC",
+            "C_LEVELPIC", "C_NAMEPIC", "C_SCOREPIC", "C_JOY1PIC", "C_JOY2PIC"
+        ])
+        wl6_chunks.extend([
+            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
+            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
+            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
+            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
+            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
+            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
+            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
+            "L_EXPOINTPIC", "L_APOSTROPHEPIC", "L_GUY2PIC", "L_BJWINSPIC",
+            "STATUSBARPIC", "TITLEPIC", "PG13PIC", "CREDITSPIC", "HIGHSCORESPIC"
+        ])
+        wl6_chunks.extend([
+            "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC", "GATLINGGUNPIC", "NOKEYPIC",
+            "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC", "N_0PIC", "N_1PIC",
+            "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC", "N_7PIC",
+            "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
+            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
+            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
+            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
+            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
+            "MUTANTBJPIC", "PAUSEDPIC", "GETPSYCHEDPIC"
+        ])
+        wl6_chunks.append("TILE8")
+        wl6_chunks.extend([
+            "ORDERSCREEN", "ERRORSCREEN", "T_HELPART", "T_DEMO0", "T_DEMO1",
+            "T_DEMO2", "T_DEMO3", "T_ENDART1", "T_ENDART2", "T_ENDART3",
+            "T_ENDART4", "T_ENDART5", "T_ENDART6"
+        ])
 
-    dest_pos = 0
+    # JAPANESE chunks
+    japanese_chunks = []
+    if japanese:
+        japanese_chunks.extend([
+            "H_HELP1PIC", "H_HELP2PIC", "H_HELP3PIC", "H_HELP4PIC", "H_HELP5PIC",
+            "H_HELP6PIC", "H_HELP7PIC", "H_HELP8PIC", "H_HELP9PIC", "H_HELP10PIC"
+        ])
+        japanese_chunks.extend([
+            "C_OPTIONSPIC", "C_CURSOR1PIC", "C_CURSOR2PIC", "C_NOTSELECTEDPIC",
+            "C_SELECTEDPIC", "C_MOUSELBACKPIC", "C_BABYMODEPIC", "C_EASYPIC",
+            "C_NORMALPIC", "C_HARDPIC", "C_LOADSAVEDISKPIC", "C_DISKLOADING1PIC",
+            "C_DISKLOADING2PIC", "C_CONTROLPIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
+            "C_EPISODE1PIC", "C_EPISODE2PIC", "C_EPISODE3PIC", "C_EPISODE4PIC",
+            "C_EPISODE5PIC", "C_EPISODE6PIC", "C_CODEPIC", "C_TIMECODEPIC",
+            "C_LEVELPIC", "C_NAMEPIC", "C_SCOREPIC", "C_JOY1PIC", "C_JOY2PIC",
+            "C_QUITMSGPIC", "C_JAPQUITPIC", "C_UNUSED_LOADING", "C_JAPNEWGAMEPIC",
+            "C_JAPSAVEOVERPIC", "C_MSCORESPIC", "C_MENDGAMEPIC", "C_MRETDEMOPIC",
+            "C_MRETGAMEPIC", "C_INTERMISSIONPIC", "C_LETSSEEPIC", "C_ENDRATIOSPIC",
+            "C_ENDGAME1APIC", "C_ENDGAME1BPIC", "C_ENDGAME2APIC", "C_ENDGAME2BPIC",
+            "C_ENDGAME3APIC", "C_ENDGAME3BPIC", "C_ENDGAME4APIC", "C_ENDGAME4BPIC",
+            "C_ENDGAME5APIC", "C_ENDGAME5BPIC", "C_ENDGAME6APIC", "C_ENDGAME6BPIC"
+        ])
+        japanese_chunks.extend([
+            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
+            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
+            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
+            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
+            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
+            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
+            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
+            "L_EXPOINTPIC", "L_APOSTROPHEPIC", "L_GUY2PIC", "L_BJWINSPIC",
+            "STATUSBARPIC", "TITLEPIC"
+        ])
+        japanese_chunks.extend([
+            "S_MOUSESENSPIC", "S_OPTIONSPIC", "S_SOUNDPIC", "S_SKILLPIC",
+            "S_EPISODEPIC", "S_CHANGEPIC", "S_CUSTOMPIC", "S_CONTROLPIC",
+            "CREDITSPIC", "HIGHSCORESPIC"
+        ])
+        japanese_chunks.extend([
+            "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC", "GATLINGGUNPIC", "NOKEYPIC",
+            "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC", "N_0PIC", "N_1PIC",
+            "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC", "N_7PIC",
+            "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
+            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
+            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
+            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
+            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
+            "MUTANTBJPIC", "PAUSEDPIC", "GETPSYCHEDPIC", "TILE8"
+        ])
+        japanese_chunks.extend([
+            "ERRORSCREEN", "T_DEMO0", "T_DEMO1", "T_DEMO2", "T_DEMO3"
+        ])
 
-    while dest_pos < end:
-        if ch & cl:
-            next_node = node['bit1']
+    # SOD chunks
+    sod_chunks = []
+    if sod:
+        sod_chunks.extend([
+            "C_BACKDROPPIC", "C_MOUSELBACKPIC", "C_CURSOR1PIC", "C_CURSOR2PIC",
+            "C_NOTSELECTEDPIC", "C_SELECTEDPIC", "C_CUSTOMIZEPIC", "C_JOY1PIC",
+            "C_JOY2PIC", "C_MOUSEPIC", "C_JOYSTICKPIC", "C_KEYBOARDPIC", "C_CONTROLPIC",
+            "C_OPTIONSPIC", "C_FXTITLEPIC", "C_DIGITITLEPIC", "C_MUSICTITLEPIC",
+            "C_HOWTOUGHPIC", "C_BABYMODEPIC", "C_EASYPIC", "C_NORMALPIC", "C_HARDPIC",
+            "C_DISKLOADING1PIC", "C_DISKLOADING2PIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
+            "HIGHSCORESPIC", "C_WONSPEARPIC"
+        ])
+        # Skip SPEARDEMO defines
+        sod_chunks.extend([
+            "BJCOLLAPSE1PIC", "BJCOLLAPSE2PIC", "BJCOLLAPSE3PIC", "BJCOLLAPSE4PIC", "ENDPICPIC"
+        ])
+        sod_chunks.extend([
+            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
+            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
+            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
+            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
+            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
+            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
+            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
+            "L_EXPOINTPIC", "L_APOSTROPHEPIC", "L_GUY2PIC", "L_BJWINSPIC",
+            "TITLE1PIC", "TITLE2PIC"
+        ])
+        # Skip SPEARDEMO defines
+        sod_chunks.extend([
+            "ENDSCREEN11PIC", "ENDSCREEN12PIC", "ENDSCREEN3PIC", "ENDSCREEN4PIC",
+            "ENDSCREEN5PIC", "ENDSCREEN6PIC", "ENDSCREEN7PIC", "ENDSCREEN8PIC", "ENDSCREEN9PIC"
+        ])
+        sod_chunks.extend([
+            "STATUSBARPIC", "PG13PIC", "CREDITSPIC"
+        ])
+        # Skip SPEARDEMO defines
+        sod_chunks.extend([
+            "IDGUYS1PIC", "IDGUYS2PIC", "COPYPROTTOPPIC", "COPYPROTBOXPIC",
+            "BOSSPIC1PIC", "BOSSPIC2PIC", "BOSSPIC3PIC", "BOSSPIC4PIC"
+        ])
+        sod_chunks.extend([
+            "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC", "GATLINGGUNPIC", "NOKEYPIC",
+            "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC", "N_0PIC", "N_1PIC",
+            "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC", "N_7PIC",
+            "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
+            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
+            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
+            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
+            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
+            "GODMODEFACE1PIC", "GODMODEFACE2PIC", "GODMODEFACE3PIC", "BJWAITING1PIC",
+            "BJWAITING2PIC", "BJOUCHPIC", "PAUSEDPIC", "GETPSYCHEDPIC", "TILE8",
+            "ORDERSCREEN", "ERRORSCREEN", "TITLEPALETTE"
+        ])
+        # Skip SPEARDEMO defines
+        sod_chunks.extend([
+            "END1PALETTE", "END2PALETTE", "END3PALETTE", "END4PALETTE",
+            "END5PALETTE", "END6PALETTE", "END7PALETTE", "END8PALETTE",
+            "END9PALETTE", "IDGUYSPALETTE"
+        ])
+        sod_chunks.extend(["T_DEMO0"])
+        # Skip SPEARDEMO defines
+        sod_chunks.extend([
+            "T_DEMO1", "T_DEMO2", "T_DEMO3", "T_ENDART1"
+        ])
+
+    # DEFAULT chunks (when none of the other defines are active)
+    default_chunks = []
+    if not (wl6 or japanese or sod):
+        default_chunks.extend([
+            "H_BJPIC", "H_CASTLEPIC", "H_KEYBOARDPIC", "H_JOYPIC", "H_HEALPIC",
+            "H_TREASUREPIC", "H_GUNPIC", "H_KEYPIC", "H_BLAZEPIC", "H_WEAPON1234PIC",
+            "H_WOLFLOGOPIC", "H_VISAPIC", "H_MCPIC", "H_IDLOGOPIC", "H_TOPWINDOWPIC",
+            "H_LEFTWINDOWPIC", "H_RIGHTWINDOWPIC", "H_BOTTOMINFOPIC"
+        ])
+
+        # Special case for APOGEE versions
+        if not (apogee_1_0 or apogee_1_1 or apogee_1_2):
+            default_chunks.append("H_SPEARADPIC")
+
+        default_chunks.extend([
+            "C_OPTIONSPIC", "C_CURSOR1PIC", "C_CURSOR2PIC", "C_NOTSELECTEDPIC",
+            "C_SELECTEDPIC", "C_FXTITLEPIC", "C_DIGITITLEPIC", "C_MUSICTITLEPIC",
+            "C_MOUSELBACKPIC", "C_BABYMODEPIC", "C_EASYPIC", "C_NORMALPIC",
+            "C_HARDPIC", "C_LOADSAVEDISKPIC", "C_DISKLOADING1PIC", "C_DISKLOADING2PIC",
+            "C_CONTROLPIC", "C_CUSTOMIZEPIC", "C_LOADGAMEPIC", "C_SAVEGAMEPIC",
+            "C_EPISODE1PIC", "C_EPISODE2PIC", "C_EPISODE3PIC", "C_EPISODE4PIC",
+            "C_EPISODE5PIC", "C_EPISODE6PIC", "C_CODEPIC"
+        ])
+
+        # Special handling for APOGEE_1_0
+        if apogee_1_0:
+            default_chunks.append("C_TIMECODEPIC")  # Same as C_CODEPIC
         else:
-            next_node = node['bit0']
+            default_chunks.extend(["C_TIMECODEPIC", "C_LEVELPIC", "C_NAMEPIC", "C_SCOREPIC"])
+            # Special case for apogee 1.1 and 1.2
+            if not (apogee_1_1 or apogee_1_2):
+                default_chunks.extend(["C_JOY1PIC", "C_JOY2PIC"])
 
-        if isinstance(next_node, int) and next_node < 256:
-            # Leaf node - output the value
-            if dest_pos < len(dest):
-                dest[dest_pos] = next_node
-            dest_pos += 1
-            node = headptr
+        default_chunks.extend([
+            "L_GUYPIC", "L_COLONPIC", "L_NUM0PIC", "L_NUM1PIC", "L_NUM2PIC",
+            "L_NUM3PIC", "L_NUM4PIC", "L_NUM5PIC", "L_NUM6PIC", "L_NUM7PIC",
+            "L_NUM8PIC", "L_NUM9PIC", "L_PERCENTPIC", "L_APIC", "L_BPIC",
+            "L_CPIC", "L_DPIC", "L_EPIC", "L_FPIC", "L_GPIC", "L_HPIC",
+            "L_IPIC", "L_JPIC", "L_KPIC", "L_LPIC", "L_MPIC", "L_NPIC",
+            "L_OPIC", "L_PPIC", "L_QPIC", "L_RPIC", "L_SPIC", "L_TPIC",
+            "L_UPIC", "L_VPIC", "L_WPIC", "L_XPIC", "L_YPIC", "L_ZPIC",
+            "L_EXPOINTPIC"
+        ])
+
+        # Special handling for APOGEE_1_0
+        if not apogee_1_0:
+            default_chunks.append("L_APOSTROPHEPIC")
+
+        default_chunks.extend([
+            "L_GUY2PIC", "L_BJWINSPIC", "STATUSBARPIC", "TITLEPIC", "PG13PIC",
+            "CREDITSPIC", "HIGHSCORESPIC", "KNIFEPIC", "GUNPIC", "MACHINEGUNPIC",
+            "GATLINGGUNPIC", "NOKEYPIC", "GOLDKEYPIC", "SILVERKEYPIC", "N_BLANKPIC",
+            "N_0PIC", "N_1PIC", "N_2PIC", "N_3PIC", "N_4PIC", "N_5PIC", "N_6PIC",
+            "N_7PIC", "N_8PIC", "N_9PIC", "FACE1APIC", "FACE1BPIC", "FACE1CPIC",
+            "FACE2APIC", "FACE2BPIC", "FACE2CPIC", "FACE3APIC", "FACE3BPIC",
+            "FACE3CPIC", "FACE4APIC", "FACE4BPIC", "FACE4CPIC", "FACE5APIC",
+            "FACE5BPIC", "FACE5CPIC", "FACE6APIC", "FACE6BPIC", "FACE6CPIC",
+            "FACE7APIC", "FACE7BPIC", "FACE7CPIC", "FACE8APIC", "GOTGATLINGPIC",
+            "MUTANTBJPIC", "PAUSEDPIC", "GETPSYCHEDPIC", "TILE8", "ORDERSCREEN",
+            "ERRORSCREEN", "T_HELPART"
+        ])
+
+        # Special handling for APOGEE_1_0
+        if apogee_1_0:
+            default_chunks.append("T_ENDART1")
+
+        default_chunks.extend(["T_DEMO0", "T_DEMO1", "T_DEMO2", "T_DEMO3"])
+
+        # Special handling for APOGEE and UPLOAD
+        if not apogee_1_0:
+            default_chunks.append("T_ENDART1")
+            if not upload:
+                default_chunks.extend(["T_ENDART2", "T_ENDART3", "T_ENDART4", "T_ENDART5", "T_ENDART6"])
+
+    # Use the appropriate chunk list based on the configuration
+    chunks = []
+    if wl6:
+        chunks = wl6_chunks
+    elif japanese:
+        chunks = japanese_chunks
+    elif sod:
+        chunks = sod_chunks
+    else:
+        chunks = default_chunks
+
+    # Adjust for base value (enums start at index 3)
+    if 3 <= value < len(chunks) + 3:
+        return chunks[value - 3]
+    elif value == len(chunks) + 3:
+        return "ENUMEND"
+    else:
+        return None
+
+
+def File_HuffExpand(source, target, expanded_size, compressed_size, dictionary):
+    # Current bit position in the source buffer
+    bit_pos = 0
+    # Current position in the target buffer
+    target_pos = 0
+
+    # Head node is always node 254
+    current_node = 254
+
+    # Process until we've filled the target buffer
+    while target_pos < expanded_size:
+        # Get the byte that contains the current bit
+        byte_idx = bit_pos // 8
+        bit_idx = bit_pos % 8
+
+        # Check if we're still within the compressed data bounds
+        if byte_idx >= len(source) or byte_idx >= compressed_size:
+            break
+
+        # Extract the current bit (LSB-first)
+        current_bit = (source[byte_idx] >> bit_idx) & 1
+        bit_pos += 1
+
+        # Navigate the Huffman tree
+        if current_bit == 0:
+            next_node = dictionary[current_node][0]
         else:
-            # Internal node - continue traversing
-            node = hufftable[next_node]
+            next_node = dictionary[current_node][1]
 
-        cl <<= 1
-        if cl == 0:
-            # Need next byte
-            if c_len <= 0:
-                break
-            ch = source[0]
-            source = source[1:]
-            c_len -= 1
-            cl = 1
-
-
-def File_OptimizeNodes(hufftmp, hufftable32):
-    for i in range(255):
-        if hufftmp[i]['bit0'] >= 256:
-            hufftable32[i]['bit0'] = hufftmp[i]['bit0'] - 256  # Will be treated as index
+        # Check if we've reached a leaf node (character)
+        if next_node < 256:
+            # It's a character, write it to the target buffer
+            target[target_pos] = next_node
+            target_pos += 1
+            # Reset to the head node
+            current_node = 254
         else:
-            hufftable32[i]['bit0'] = hufftmp[i]['bit0']
+            # It's an internal node, continue traversal
+            current_node = next_node - 256
 
-        if hufftmp[i]['bit1'] >= 256:
-            hufftable32[i]['bit1'] = hufftmp[i]['bit1'] - 256  # Will be treated as index
-        else:
-            hufftable32[i]['bit1'] = hufftmp[i]['bit1']
+    return
 
-def File_VGA_GetChunkSize(n):
+
+def File_VGA_ReadChunk(n):
     global VgaFiles
-    
+
     if n < 0 or n >= VgaFiles.TotalChunks:
         print(f"FileIO: VGA chunk index out of bounds [0, {VgaFiles.TotalChunks}]: {n}")
-        return 0
-
-    with open(VgaFiles.FileName, 'rb') as fp:
-        fp.seek(VgaFiles.offset[n])
-        size_bytes = fp.read(4)
-
-        if len(size_bytes) != 4:
-            return 0
-
-        size = struct.unpack('<L', size_bytes)[0]
-        return size
-
-
-def File_VGA_ReadChunk(n, target):
-    global VgaFiles
-
-    if n < 0 or n >= VgaFiles.TotalChunks:
-        print(f"FileIO: VGA chunk index out of bounds [0, {VgaFiles.TotalChunks}]: {n}")
-        return 0
+        return None
 
     # Find next valid chunk to determine compressed size
     next_chunk = n + 1
@@ -710,43 +956,43 @@ def File_VGA_ReadChunk(n, target):
         src = fp.read(compressed_size)
 
     if not src:
-        return 0
+        return None
 
-    # The first 4 bytes are the expanded length (except for chunk 0)
-    if n == 0:
+    if n == 0: # picdef
         expanded = VgaFiles.TotalChunks * 4
+    elif n == 135: # tile8
+        expanded = 35 * 64 # BLOCK * NUMTILE8
     else:
         expanded = struct.unpack('<L', src[:4])[0]
 
     if expanded == 0:
-        return 0
+        return None
 
     source = src[4:]  # Skip length bytes
+    target = bytearray(expanded)
 
-    # Huffman expand the data
-    File_HuffExpand(source, target, expanded, compressed_size, VgaFiles.grhuffman32)
-    return 1
+    File_HuffExpand(source, target, expanded, compressed_size, VgaFiles.hufftable)
+    return target
 
 
-def File_VGA_ReadPic(chunk, pic):
-    picnum = chunk - 3  # STARTPICS (0..2 are special chunks)
+def File_VGA_ReadPic(chunk):
+    pic = {}
+
+    picnum = chunk - 3
     if picnum < 0:
-        return 0
-
-    size = File_VGA_GetChunkSize(chunk)
-    if size <= 0:
-        return 0
+        return None
 
     width = VgaFiles.pictable[picnum]['width']
     height = VgaFiles.pictable[picnum]['height']
     if width < 1 or width > 320 or height < 1 or height > 200:
-        return 0  # Not a picture
+        return None  # Not a picture
 
-    buf = bytearray(size)
-    if not File_VGA_ReadChunk(chunk, buf):
-        return 0
+    buf = File_VGA_ReadChunk(chunk)
 
-    buf1 = bytearray(size)
+    if buf is None:
+        return None
+
+    buf1 = bytearray(len(buf))
 
     width = VgaFiles.pictable[picnum]['width']
     height = VgaFiles.pictable[picnum]['height']
@@ -768,10 +1014,10 @@ def File_VGA_ReadPic(chunk, pic):
         pic['data'][n * 3 + 1] = WolfPal[color_idx]['g']
         pic['data'][n * 3 + 2] = WolfPal[color_idx]['b']
 
-    return 1
+    return pic
 
 
-def File_VGA_OpenVgaFiles(dict_path: Path, header_path: Path, vga_path: Path):
+def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
     global VgaFiles
 
     # Check if files exist
@@ -790,17 +1036,12 @@ def File_VGA_OpenVgaFiles(dict_path: Path, header_path: Path, vga_path: Path):
     VgaFiles.HeadName = str(header_path)
     VgaFiles.DictName = str(dict_path)
     VgaFiles.FileName = str(vga_path)
-    VgaFiles.grhuffman32 = [{'bit0': 0, 'bit1': 0} for _ in range(256)]
 
-    # Read dictionary file (huffman nodes)
+    # Read dictionary file (huffman nodes) (1024 bytes)
     with open(dict_path, 'rb') as fp:
-        hufftmp = []
         for _ in range(256):
             bit0, bit1 = struct.unpack('<HH', fp.read(4))
-            hufftmp.append({'bit0': bit0, 'bit1': bit1})
-
-    # Optimize huffman nodes
-    File_OptimizeNodes(hufftmp, VgaFiles.grhuffman32)
+            VgaFiles.hufftable.append((bit0, bit1))
 
     # Read header file to get chunks info
     header_size = os.path.getsize(header_path)
@@ -815,20 +1056,18 @@ def File_VGA_OpenVgaFiles(dict_path: Path, header_path: Path, vga_path: Path):
             VgaFiles.offset.append(offset)
 
     # Read picture definitions from chunk 0
-    picdef = bytearray(VgaFiles.TotalChunks * 4)
-    if not File_VGA_ReadChunk(0, picdef):
+    picdef = File_VGA_ReadChunk(0)
+    if picdef is None:
         print("Failed to read picture definitions chunk")
         return 0
 
-    # Convert to picture table
     VgaFiles.pictable = []
     for i in range(VgaFiles.TotalChunks):
         width = struct.unpack('<H', picdef[i * 4:i * 4 + 2])[0]
         height = struct.unpack('<H', picdef[i * 4 + 2:i * 4 + 4])[0]
-        print(f"{width}x{height}")
         VgaFiles.pictable.append({'width': width, 'height': height})
 
-    print("FileIO: VGA graphics files:")
+    print("FileIO: VGA graphics files")
     print(f"-> dict: {dict_path}")
     print(f"-> head: {header_path}")
     print(f"-> main: {vga_path}")
@@ -842,26 +1081,45 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
         sys.exit(1)
 
     # Create output directories
+    Path("vga/fonts").mkdir(parents=True, exist_ok=True)
     Path("vga/pics").mkdir(parents=True, exist_ok=True)
-    Path("vga/chunks").mkdir(parents=True, exist_ok=True)
+    Path("vga/endscreens").mkdir(parents=True, exist_ok=True)
+    Path("vga/demos").mkdir(parents=True, exist_ok=True)
+    Path("vga/endarts").mkdir(parents=True, exist_ok=True)
 
-    # Extract all pictures
-    for chunk in range(3, VgaFiles.TotalChunks):  # First 3 chunks are special
-        pic = {}
-        if File_VGA_ReadPic(chunk, pic): # TODO: always returns 0
-            if pic.get('width', 0) > 0 and pic.get('height', 0) > 0:
-                im = Image.frombytes('RGB', (pic['width'], pic['height']), bytes(pic['data']), 'raw')
-                im.save(f"vga/pics/{chunk - 3}.png")
+    # Extract everything (hardcoded indexes based on vgapics.h, tested only with WL6)
+    for chunk in range(0, VgaFiles.TotalChunks):
+        name = GetChunkName(chunk, wl6=True)
 
-    # Extract raw chunks
-    # TODO: infinite loop after 134th chunk
-    for chunk in range(VgaFiles.TotalChunks):
-        size = File_VGA_GetChunkSize(chunk)
-        if size > 0:
-            data = bytearray(size)
-            if File_VGA_ReadChunk(chunk, data):
-                with open(f"vga/chunks/{chunk}.bin", "wb") as f:
-                    f.write(data)
+        if 1 <= chunk <= 2: # fonts
+            font = File_VGA_ReadChunk(chunk)
+            with open(f"vga/fonts/{chunk - 1}.bin", 'wb') as fp:
+                fp.write(font)
+
+        elif 3 <= chunk <= 134: # pictures
+            pic = File_VGA_ReadPic(chunk)
+            im = Image.frombytes('RGB', (pic['width'], pic['height']), bytes(pic['data']), 'raw')
+            im.save(f"vga/pics/{chunk -3}_{name}.png")
+
+        elif chunk == 135: # TILE8
+            tile8 = File_VGA_ReadChunk(chunk)
+            with open(f"vga/tile8.bin", 'wb') as fp:
+                fp.write(tile8)
+
+        elif 136 <= chunk <= 137: # endscreens
+            endscreen = File_VGA_ReadChunk(chunk)
+            with open(f"vga/endscreens/{name}.bin", 'wb') as fp:
+                fp.write(endscreen)
+
+        elif chunk == 138 or (143 <= chunk <= 148): # endarts
+            endart = File_VGA_ReadChunk(chunk)
+            with open(f"vga/endarts/{name}.txt", 'wb') as fp:
+                fp.write(endart)
+
+        elif 139 <= chunk <= 148:
+            demo = File_VGA_ReadChunk(chunk)
+            with open(f"vga/demos/{name}.bin", 'wb') as fp:
+                fp.write(demo)
 
 
 # GAMEMAPS/MAPHEAD
@@ -1020,8 +1278,9 @@ def main():
     input_path = Path(args.input)
 
     extract_maps(input_path / "MAPHEAD.WL6", input_path / "GAMEMAPS.WL6")
+    print()
     extract_vswap(input_path / "VSWAP.WL6")
-    # TODO: borked
+    print()
     extract_vga(input_path / "VGADICT.WL6", input_path / "VGAHEAD.WL6", input_path / "VGAGRAPH.WL6")
 
             
