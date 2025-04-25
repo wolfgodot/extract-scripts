@@ -15,16 +15,14 @@ class wl_picture:
     height: int
 
 @dataclass
-class VF_Struct:
+class VGAContext:
     TotalChunks: int = 0
-    HeadName: str = ""
-    DictName: str = ""
-    FileName: str = ""
+    HeadName: Path = Path()
+    DictName: Path = Path()
+    FileName: Path = Path()
     offset: List[int] = field(default_factory=list)
     pictable: List[wl_picture] = field(default_factory=list)
     hufftable: List[tuple[int, int]] = field(default_factory=list)
-
-VgaFiles = VF_Struct()
 
 
 def File_HuffExpand(source, target, expanded_size, compressed_size, dictionary):
@@ -70,33 +68,31 @@ def File_HuffExpand(source, target, expanded_size, compressed_size, dictionary):
     return
 
 
-def File_VGA_ReadChunk(n):
-    global VgaFiles
-
-    if n < 0 or n >= VgaFiles.TotalChunks:
-        print(f"FileIO: VGA chunk index out of bounds [0, {VgaFiles.TotalChunks}]: {n}")
+def File_VGA_ReadChunk(ctx: VGAContext, n):
+    if n < 0 or n >= ctx.TotalChunks:
+        print(f"FileIO: VGA chunk index out of bounds [0, {ctx.TotalChunks}]: {n}")
         return None
 
     # Find next valid chunk to determine compressed size
     next_chunk = n + 1
-    while next_chunk < VgaFiles.TotalChunks and VgaFiles.offset[next_chunk] == -1:
+    while next_chunk < ctx.TotalChunks and ctx.offset[next_chunk] == -1:
         next_chunk += 1
 
-    if next_chunk >= VgaFiles.TotalChunks:
-        compressed_size = os.path.getsize(VgaFiles.FileName) - VgaFiles.offset[n]
+    if next_chunk >= ctx.TotalChunks:
+        compressed_size = os.path.getsize(ctx.FileName) - ctx.offset[n]
     else:
-        compressed_size = VgaFiles.offset[next_chunk] - VgaFiles.offset[n]
+        compressed_size = ctx.offset[next_chunk] - ctx.offset[n]
 
     # Read compressed data
-    with open(VgaFiles.FileName, 'rb') as fp:
-        fp.seek(VgaFiles.offset[n])
+    with open(ctx.FileName, 'rb') as fp:
+        fp.seek(ctx.offset[n])
         src = fp.read(compressed_size)
 
     if not src:
         return None
 
     if n == 0: # picdef
-        expanded = VgaFiles.TotalChunks * 4
+        expanded = ctx.TotalChunks * 4
     elif n == 135: # tile8
         expanded = 35 * 64 # BLOCK * NUMTILE8
     else:
@@ -108,22 +104,20 @@ def File_VGA_ReadChunk(n):
     source = src[4:]  # Skip length bytes
     target = bytearray(expanded)
 
-    File_HuffExpand(source, target, expanded, compressed_size, VgaFiles.hufftable)
+    File_HuffExpand(source, target, expanded, compressed_size, ctx.hufftable)
     return target
 
 
-def File_VGA_ReadPic(chunk):
-    global VgaFiles
-
+def File_VGA_ReadPic(ctx: VGAContext, chunk):
     picnum = chunk - 3
     if picnum < 0:
         return None
 
-    wl_pic = VgaFiles.pictable[picnum]
+    wl_pic = ctx.pictable[picnum]
     if wl_pic.width < 1 or wl_pic.width > 320 or wl_pic.height < 1 or wl_pic.height > 200:
         return None  # Not a picture
 
-    buf = File_VGA_ReadChunk(chunk)
+    buf = File_VGA_ReadChunk(ctx, chunk)
 
     if buf is None:
         return None
@@ -149,10 +143,7 @@ def File_VGA_ReadPic(chunk):
     return wl_pic, buf2
 
 
-def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
-    global VgaFiles
-
-    # Check if files exist
+def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, vga_path: Path):
     if not os.path.isfile(dict_path):
         print(f"FileIO: graphics dictionary missed: {dict_path}")
         return 0
@@ -163,54 +154,52 @@ def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
         print(f"FileIO: VGA graphics file missed: {vga_path}")
         return 0
 
-    # Initialize VgaFiles structure
-    VgaFiles = VF_Struct()
-    VgaFiles.HeadName = str(header_path)
-    VgaFiles.DictName = str(dict_path)
-    VgaFiles.FileName = str(vga_path)
+    ctx.HeadName = header_path
+    ctx.DictName = dict_path
+    ctx.FileName = vga_path
 
     # Read dictionary file (huffman nodes) (1024 bytes)
     with open(dict_path, 'rb') as fp:
         for _ in range(256):
             bit0, bit1 = struct.unpack('<HH', fp.read(4))
-            VgaFiles.hufftable.append((bit0, bit1))
+            ctx.hufftable.append((bit0, bit1))
 
     # Read header file to get chunks info
     header_size = os.path.getsize(header_path)
-    VgaFiles.TotalChunks = header_size // 3
+    ctx.TotalChunks = header_size // 3
 
     with open(header_path, 'rb') as fp:
-        for _ in range(VgaFiles.TotalChunks):
+        for _ in range(ctx.TotalChunks):
             temp = fp.read(3)
             offset = temp[0] + (temp[1] << 8) + (temp[2] << 16)
             if offset == 0xFFFFFF:
                 offset = -1
-            VgaFiles.offset.append(offset)
+            ctx.offset.append(offset)
 
     # Read picture definitions from chunk 0
-    picdef = File_VGA_ReadChunk(0)
+    picdef = File_VGA_ReadChunk(ctx, 0)
     if picdef is None:
         print("Failed to read picture definitions chunk")
         return 0
 
-    VgaFiles.pictable = []
-    for i in range(VgaFiles.TotalChunks):
+    ctx.pictable = []
+    for i in range(ctx.TotalChunks):
         width = struct.unpack('<H', picdef[i * 4:i * 4 + 2])[0]
         height = struct.unpack('<H', picdef[i * 4 + 2:i * 4 + 4])[0]
-        VgaFiles.pictable.append(wl_picture(width, height))
+        ctx.pictable.append(wl_picture(width, height))
 
     print("FileIO: VGA graphics files")
     print(f"-> dict: {dict_path}")
     print(f"-> head: {header_path}")
     print(f"-> main: {vga_path}")
-    print(f"-> Total Chunks: {VgaFiles.TotalChunks}")
+    print(f"-> Total Chunks: {ctx.TotalChunks}")
     return 1
 
 
 def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
-    global VgaFiles
+    ctx = VGAContext()
 
-    if not File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
+    if not File_VGA_OpenVgaFiles(ctx, dict_path, header_path, vga_path):
         print("Failed to open VGA files")
         sys.exit(1)
 
@@ -222,36 +211,36 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
     Path("vga/endarts").mkdir(parents=True, exist_ok=True)
 
     # Extract everything (hardcoded indexes based on vgapics.h, tested only with WL6)
-    for chunk in range(0, VgaFiles.TotalChunks):
+    for chunk in range(0, ctx.TotalChunks):
         name = GetChunkName(chunk, wl6=True)
 
         if 1 <= chunk <= 2: # fonts
-            font = File_VGA_ReadChunk(chunk)
+            font = File_VGA_ReadChunk(ctx, chunk)
             with open(f"vga/fonts/{chunk - 1}.bin", 'wb') as fp:
                 fp.write(font)
 
         elif 3 <= chunk <= 134: # pictures
-            wl_pic, buf = File_VGA_ReadPic(chunk)
+            wl_pic, buf = File_VGA_ReadPic(ctx, chunk)
             im = Image.frombytes('RGB', (wl_pic.width, wl_pic.height), bytes(buf), 'raw')
             im.save(f"vga/pics/{chunk - 3}_{name}.png")
 
         elif chunk == 135: # TILE8
-            tile8 = File_VGA_ReadChunk(chunk)
+            tile8 = File_VGA_ReadChunk(ctx, chunk)
             with open(f"vga/tile8.bin", 'wb') as fp:
                 fp.write(tile8)
 
         elif 136 <= chunk <= 137: # endscreens
-            endscreen = File_VGA_ReadChunk(chunk)
+            endscreen = File_VGA_ReadChunk(ctx, chunk)
             with open(f"vga/endscreens/{name}.bin", 'wb') as fp:
                 fp.write(endscreen)
 
         elif chunk == 138 or (143 <= chunk <= 148): # endarts
-            endart = File_VGA_ReadChunk(chunk)
+            endart = File_VGA_ReadChunk(ctx, chunk)
             with open(f"vga/endarts/{name}.txt", 'wb') as fp:
                 fp.write(endart)
 
         elif 139 <= chunk <= 148:
-            demo = File_VGA_ReadChunk(chunk)
+            demo = File_VGA_ReadChunk(ctx, chunk)
             with open(f"vga/demos/{name}.bin", 'wb') as fp:
                 fp.write(demo)
 

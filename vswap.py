@@ -9,6 +9,11 @@ from PIL import Image
 
 from palette import WolfPal, SodPal
 
+@dataclass
+class Shape:
+    leftpix: int
+    rightpix: int
+    dataofs: List[int]  # Array of 64 unsigned short offsets
 
 @dataclass
 class Chunk:
@@ -16,21 +21,12 @@ class Chunk:
     length: int = 0
 
 @dataclass
-class PF_Struct:
+class VSwapContext:
     ChunksInFile: int = 0
     SpriteStart: int = 0
     SoundStart: int = 0
     Pages: List[Chunk] = field(default_factory=list)
-    FileName: str = ""
-
-@dataclass
-class Shape:
-    leftpix: int
-    rightpix: int
-    dataofs: List[int]  # Array of 64 unsigned short offsets
-
-
-PageFile = PF_Struct()
+    FileName: Path = Path()
 
 
 def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
@@ -57,29 +53,27 @@ def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
                     dst.append(255)
 
 
-def File_PML_OpenPageFile(filename: Path):
-    global PageFile
-
+def File_PML_OpenPageFile(ctx: VSwapContext, filename: Path):
     try:
         with open(filename, 'rb') as fp:
-            PageFile.FileName = filename
+            ctx.FileName = filename
 
             header = fp.read(6)
-            PageFile.ChunksInFile, PageFile.SpriteStart, PageFile.SoundStart = struct.unpack('<HHH', header)
+            ctx.ChunksInFile, ctx.SpriteStart, ctx.SoundStart = struct.unpack('<HHH', header)
 
             print(f"FileIO: Page File")
-            print(f"-> Total Chunks : {PageFile.ChunksInFile}")
-            print(f"-> Sprites start: {PageFile.SpriteStart}")
-            print(f"-> Sounds start : {PageFile.SoundStart}")
+            print(f"-> Total Chunks : {ctx.ChunksInFile}")
+            print(f"-> Sprites start: {ctx.SpriteStart}")
+            print(f"-> Sounds start : {ctx.SoundStart}")
 
-            PageFile.Pages = [Chunk() for _ in range(PageFile.ChunksInFile)]
+            ctx.Pages = [Chunk() for _ in range(ctx.ChunksInFile)]
 
-            for i in range(PageFile.ChunksInFile):
-                PageFile.Pages[i].offset = struct.unpack('<L', fp.read(4))[0]
+            for i in range(ctx.ChunksInFile):
+                ctx.Pages[i].offset = struct.unpack('<L', fp.read(4))[0]
 
-            for i in range(PageFile.ChunksInFile):
+            for i in range(ctx.ChunksInFile):
                 tmp = struct.unpack('<H', fp.read(2))[0]
-                PageFile.Pages[i].length = tmp
+                ctx.Pages[i].length = tmp
 
         return 1
     except FileNotFoundError:
@@ -87,41 +81,37 @@ def File_PML_OpenPageFile(filename: Path):
         return 0
 
 
-def File_PML_ReadPage(n, data):
-    global PageFile
-
-    if not PageFile.FileName:
+def File_PML_ReadPage(ctx: VSwapContext, n, data):
+    if not ctx.FileName:
         print("FileIO: Page file not opened")
         return 0
-    if n >= PageFile.ChunksInFile:
+    if n >= ctx.ChunksInFile:
         print(f"FileIO: Wrong chunk num {n}")
         return 0
-    if not PageFile.Pages[n].length or not PageFile.Pages[n].offset:
+    if not ctx.Pages[n].length or not ctx.Pages[n].offset:
         print(f"FileIO: Page {n} wrong header data")
         return 0
     if data is None:
         print("FileIO: Bad Pointer!")
         return 0
 
-    with open(PageFile.FileName, 'rb') as fp:
-        fp.seek(PageFile.Pages[n].offset)
-        chunk_data = fp.read(PageFile.Pages[n].length)
+    with open(ctx.FileName, 'rb') as fp:
+        fp.seek(ctx.Pages[n].offset)
+        chunk_data = fp.read(ctx.Pages[n].length)
         data[:] = chunk_data
-        if len(chunk_data) != PageFile.Pages[n].length:
+        if len(chunk_data) != ctx.Pages[n].length:
             print(f"FileIO: Page {n} read error")
             return 0
     return 1
 
 
-def File_PML_LoadWall(n, block, palette=WolfPal):
-    global PageFile
-
-    if n >= PageFile.SpriteStart:
-        print(f"FileIO: Wall index ({n}) out of bounds [0-{PageFile.SpriteStart}]")
+def File_PML_LoadWall(ctx: VSwapContext, n, block, palette=WolfPal):
+    if n >= ctx.SpriteStart:
+        print(f"FileIO: Wall index ({n}) out of bounds [0-{ctx.SpriteStart}]")
         return 0
 
-    data = bytearray(PageFile.Pages[n].length)
-    if not File_PML_ReadPage(n, data):
+    data = bytearray(ctx.Pages[n].length)
+    if not File_PML_ReadPage(ctx, n, data):
         return 0
 
     for x in range(64):
@@ -134,15 +124,13 @@ def File_PML_LoadWall(n, block, palette=WolfPal):
     return 1
 
 
-def File_PML_LoadSprite(n, block, palette=WolfPal):
-    global PageFile
-
-    if n < PageFile.SpriteStart or n >= PageFile.SoundStart:
-        print(f"FileIO: Sprite index ({n}) out of bounds [{PageFile.SpriteStart}-{PageFile.SoundStart}]")
+def File_PML_LoadSprite(ctx: VSwapContext, n, block, palette=WolfPal):
+    if n < ctx.SpriteStart or n >= ctx.SoundStart:
+        print(f"FileIO: Sprite index ({n}) out of bounds [{ctx.SpriteStart}-{ctx.SoundStart}]")
         return 0
 
-    sprite = bytearray(PageFile.Pages[n].length)
-    if not File_PML_ReadPage(n, sprite):
+    sprite = bytearray(ctx.Pages[n].length)
+    if not File_PML_ReadPage(ctx, n, sprite):
         return 0
 
     # Initialize all as transparent
@@ -186,7 +174,7 @@ def File_PML_LoadSprite(n, block, palette=WolfPal):
 
 
 def extract_vswap(vswap_path):
-    global PageFile
+    ctx = VSwapContext()
 
     spear = True if vswap_path.suffix.lower() == ".sod" else False
     palette = SodPal if spear else WolfPal
@@ -199,41 +187,41 @@ def extract_vswap(vswap_path):
         print(f"Error: Input file not found: {vswap_path}")
         sys.exit(1)
 
-    if not File_PML_OpenPageFile(vswap_path):
+    if not File_PML_OpenPageFile(ctx, vswap_path):
         print("Failed to open page file.")
         sys.exit(1)
 
-    for i in range(PageFile.SpriteStart):
+    for i in range(ctx.SpriteStart):
         block = bytearray(64 * 64 * 3)
-        if File_PML_LoadWall(i, block, palette):
+        if File_PML_LoadWall(ctx, i, block, palette):
             im = Image.frombytes('RGB', (64, 64), block, 'raw')
             idx, shaded = divmod(i, 2)  # every second texture is a shaded variant
             im.save(f"vswap/walls/{idx}.png" if shaded == 0 else f"vswap/walls/{idx}_shaded.png")
         else:
             print(f"Failed to load wall {i}.")
 
-    for i in range(PageFile.SpriteStart, PageFile.SoundStart):
+    for i in range(ctx.SpriteStart, ctx.SoundStart):
         block = bytearray(64 * 64 * 4)
-        if File_PML_LoadSprite(i, block, palette):
+        if File_PML_LoadSprite(ctx, i, block, palette):
             im = Image.frombytes('RGBA', (64, 64), block, 'raw')
-            shapenum = i - PageFile.SpriteStart
+            shapenum = i - ctx.SpriteStart
             im.save(f"vswap/sprites/{shapenum}_{GetSpriteName(shapenum, spear=spear)}.png")
         else:
             print(f"Failed to load sprite {i}.")
 
-    digimap_n = PageFile.ChunksInFile - 1
-    digimap = bytearray(PageFile.Pages[digimap_n].length)
-    if not File_PML_ReadPage(digimap_n, digimap):
+    digimap_n = ctx.ChunksInFile - 1
+    digimap = bytearray(ctx.Pages[digimap_n].length)
+    if not File_PML_ReadPage(ctx, digimap_n, digimap):
         print("Failed to load digimap page.")
         sys.exit(1)
 
     with open("vswap/digisounds/digimap.bin", "wb") as digimap_file:
         digimap_file.write(digimap)
 
-    for i in range(PageFile.SoundStart, digimap_n):
-        block = bytearray(PageFile.Pages[i].length)
-        soundnum = i - PageFile.SoundStart
-        if not File_PML_ReadPage(i, block):
+    for i in range(ctx.SoundStart, digimap_n):
+        block = bytearray(ctx.Pages[i].length)
+        soundnum = i - ctx.SoundStart
+        if not File_PML_ReadPage(ctx, i, block):
             print(f"Failed to load sound {soundnum}.")
         with open(f"vswap/digisounds/{soundnum}.bin", "wb") as sound_file:
             sound_file.write(block)
