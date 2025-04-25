@@ -1,7 +1,7 @@
 import os
 import struct
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
@@ -10,20 +10,18 @@ from PIL import Image
 from palette import WolfPal, SodPal
 
 
+@dataclass
 class Chunk:
-    def __init__(self, offset=0, length=0):
-        self.offset = offset
-        self.length = length
+    offset: int = 0
+    length: int = 0
 
-
+@dataclass
 class PF_Struct:
-    def __init__(self):
-        self.ChunksInFile = 0
-        self.SpriteStart = 0
-        self.SoundStart = 0
-        self.Pages = []
-        self.FileName = ""
-
+    ChunksInFile: int = 0
+    SpriteStart: int = 0
+    SoundStart: int = 0
+    Pages: List[Chunk] = field(default_factory=list)
+    FileName: str = ""
 
 @dataclass
 class Shape:
