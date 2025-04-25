@@ -61,6 +61,7 @@ def Img_ExpandPalette(dst, src, w, h, pal=None, transparent=True):
 
 def File_PML_OpenPageFile(filename: Path):
     global PageFile
+
     try:
         with open(filename, 'rb') as fp:
             PageFile.FileName = filename
@@ -89,6 +90,8 @@ def File_PML_OpenPageFile(filename: Path):
 
 
 def File_PML_ReadPage(n, data):
+    global PageFile
+
     if not PageFile.FileName:
         print("FileIO: Page file not opened")
         return 0
@@ -113,6 +116,8 @@ def File_PML_ReadPage(n, data):
 
 
 def File_PML_LoadWall(n, block, palette=WolfPal):
+    global PageFile
+
     if n >= PageFile.SpriteStart:
         print(f"FileIO: Wall index ({n}) out of bounds [0-{PageFile.SpriteStart}]")
         return 0
@@ -132,6 +137,8 @@ def File_PML_LoadWall(n, block, palette=WolfPal):
 
 
 def File_PML_LoadSprite(n, block, palette=WolfPal):
+    global PageFile
+
     if n < PageFile.SpriteStart or n >= PageFile.SoundStart:
         print(f"FileIO: Sprite index ({n}) out of bounds [{PageFile.SpriteStart}-{PageFile.SoundStart}]")
         return 0
@@ -181,6 +188,8 @@ def File_PML_LoadSprite(n, block, palette=WolfPal):
 
 
 def extract_vswap(vswap_path):
+    global PageFile
+
     spear = True if vswap_path.suffix.lower() == ".sod" else False
     palette = SodPal if spear else WolfPal
 

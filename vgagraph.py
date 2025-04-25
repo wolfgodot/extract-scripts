@@ -109,6 +109,8 @@ def File_VGA_ReadChunk(n):
 
 
 def File_VGA_ReadPic(chunk):
+    global VgaFiles
+
     pic = {}
 
     picnum = chunk - 3
@@ -209,6 +211,8 @@ def File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
 
 
 def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
+    global VgaFiles
+
     if not File_VGA_OpenVgaFiles(dict_path, header_path, vga_path):
         print("Failed to open VGA files")
         sys.exit(1)
