@@ -223,8 +223,9 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
     endarts_path.mkdir(parents=True, exist_ok=True)
 
     # Extract everything (hardcoded indexes based on vgapics.h, tested only with WL6)
-    for chunk in range(0, ctx.TotalChunks):
-        name = "UNKNOWN" if chunk >= len(ctx.names) else ctx.names[chunk]
+    # TODO: wtf is chunk 149?
+    for chunk in range(0, ctx.TotalChunks - 1):
+        name = ctx.names[chunk]
 
         if 1 <= chunk <= 2: # fonts
             font = File_VGA_ReadChunk(ctx, chunk)
