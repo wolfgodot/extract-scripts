@@ -268,7 +268,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
             with open(endarts_path / f"{name}.txt", 'wb') as fp:
                 fp.write(endart)
 
-        elif 139 <= chunk <= 148:
+        elif 139 <= chunk <= 148: # demos
             demo = File_VGA_ReadChunk(ctx, chunk)
             with open(demos_path / f"{name}.bin", 'wb') as fp:
                 fp.write(demo)
