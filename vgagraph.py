@@ -374,10 +374,42 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
         elif chunk == 135: # TILE8
             buf = File_VGA_ReadChunk(ctx, chunk)
             v = memoryview(buf)
+
+            tiles = []
+
             for tile in range(0, 35): #define NUMTILE8 35
-                tile_buf = deplane(v[64 * tile:64 * tile + 64], 8, 8, palette)
-                im = Image.frombytes('RGB', (8, 8), bytes(tile_buf), 'raw')
-                im.save(tile8_path / f"{tile}.png")
+                tile_buf = deplane(v[64 * tile:64 * tile + 65], 8, 8, palette)
+                tiles.append(tile_buf)
+
+            # Generate nine-patch (3x3 tiles) rectangle texture for window borders
+            # Assume white background for the missing middle tile
+            # TODO: Consider extracting TILE8 font (it's not used anywhere in WOLF3D code)
+
+            blank_tile = bytearray(b'\xFF') * (8 ** 2) * 3
+
+            window_tiles = [
+                tiles[0], tiles[1], tiles[2],
+                tiles[3], blank_tile, tiles[4],
+                tiles[5], tiles[6], tiles[7],
+            ]
+
+            patch_buf = bytearray(((8 * 3) ** 2) * 3)
+
+            for tiley in range(0, 3):
+                for tilex in range(0, 3):
+                    window_tile = window_tiles[tiley * 3 + tilex]
+                    for y in range(0, 8):
+                        patchy = tiley * 8 + y
+                        for x in range(0, 8):
+                            patchx = tilex * 8 + x
+                            i = y * 8 + x
+                            j = patchy * (8 * 3) + patchx
+                            patch_buf[j * 3 + 0] = window_tile[i * 3 + 0]
+                            patch_buf[j * 3 + 1] = window_tile[i * 3 + 1]
+                            patch_buf[j * 3 + 2] = window_tile[i * 3 + 2]
+
+            im = Image.frombytes('RGB', (8 * 3, 8 * 3), bytes(patch_buf), 'raw')
+            im.save(tile8_path / f"WINDOW.png")
 
         elif 136 <= chunk <= 137: # endscreens
             endscreen = File_VGA_ReadChunk(ctx, chunk)
