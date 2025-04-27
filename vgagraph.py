@@ -103,10 +103,13 @@ def File_VGA_ReadChunk(ctx: VGAContext, n):
     if expanded == 0:
         return None
 
-    source = src[4:]  # Skip length bytes
+    # Skip length bytes (except for TILE8)
+    if n != 135:
+        src = src[4:]
+
     target = bytearray(expanded)
 
-    File_HuffExpand(source, target, expanded, compressed_size, ctx.hufftable)
+    File_HuffExpand(src, target, expanded, compressed_size, ctx.hufftable)
     return target
 
 
