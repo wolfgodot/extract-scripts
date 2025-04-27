@@ -244,6 +244,8 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
             font = File_VGA_ReadChunk(ctx, chunk)
             v = memoryview(font)
 
+            font_chars = []
+
             height = struct.unpack('<h', v[0:2])[0]
             for i in range(256):
                 loc = struct.unpack('<h', v[2 + (i * 2):2 + (i * 2 + 2)])[0]
@@ -252,24 +254,114 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                 if loc == 0 or width == 0:
                     continue
 
-                buf = bytearray(width * height * 4)
-                for j in range(width * height):
-                    b = v[loc + j]
-                    if b != 0x00: # alternatively: == 0x0F, holds for WL6
-                        buf[j * 4 + 0] = 255
-                        buf[j * 4 + 1] = 255
-                        buf[j * 4 + 2] = 255
-                        buf[j * 4 + 3] = 255
-                    else:
-                        buf[j * 4 + 0] = 0
-                        buf[j * 4 + 1] = 0
-                        buf[j * 4 + 2] = 0
-                        buf[j * 4 + 3] = 0
+                font_chars.append({
+                    "letter": chr(i),
+                    "buf": memoryview(v[loc:loc + width * height]),
+                    "width" : width,
+                })
 
-                im = Image.frombytes('RGBA', (width, height), bytes(buf), 'raw')
-                im.save(font_path / f"{name}_{i}.png")
+            # TODO: save as optimized "power of two" cells instead of one line
 
-                # TODO: save as BMFont
+            total_width = sum(fc["width"] for fc in font_chars)
+            buf = bytearray(height * total_width * 4)
+
+            for y in range(height):
+                stride = 0
+                for fc in font_chars:
+                    for x in range(fc["width"]):
+                        i = y * fc["width"] + x
+                        j = (y * total_width + x + stride) * 4
+                        if fc["buf"][i] != 0x00: # alternatively: == 0x0F, holds for WL6
+                            buf[j + 0] = 255
+                            buf[j + 1] = 255
+                            buf[j + 2] = 255
+                            buf[j + 3] = 255
+                        else:
+                            buf[j + 0] = 0
+                            buf[j + 1] = 0
+                            buf[j + 2] = 0
+                            buf[j + 3] = 0
+
+                    stride += fc["width"]
+
+            tex_name = f"{name}.png"
+            im = Image.frombytes('RGBA', (total_width, height), bytes(buf), 'raw')
+            im.save(font_path / tex_name)
+
+            # https://www.angelcode.com/products/bmfont/doc/file_format.html
+            bmfont = [
+                {
+                    "info": {
+                        "face": name,
+                        "size": height,
+                        "bold": 0,
+                        "italic": 0,
+                        "charset": "",
+                        "unicode": 1,
+                        "stretchH": 100,
+                        "smooth": 0,
+                        "aa": 1,
+                        "padding": [0, 0, 0, 0],
+                        "spacing": [0, 0], # [1,1] ?
+                        "outline": 0
+                    }
+                },
+                {
+                    "common": {
+                        "lineHeight": height,
+                        "base": height,
+                        "scaleW": total_width,
+                        "scaleH": height,
+                        "pages": 1,
+                        "packed": 0,
+                        "alphaChnl": 2,
+                        "redChnl": 0,
+                        "greenChnl": 0,
+                        "blueChnl": 0,
+                    },
+                },
+                {
+                    "page": {
+                        "id": 0,
+                        "file": tex_name
+                    },
+                },
+                {
+                    "chars": {
+                        "count": len(font_chars)
+                    }
+                },
+            ]
+
+            x = 0
+            for fc in font_chars:
+                bmfont.append({"char": {
+                    "id": ord(fc["letter"]),
+                    "x": x,
+                    "y": 0,
+                    "width": fc["width"],
+                    "height": height,
+                    "xoffset": 0,
+                    "yoffset": 0,
+                    "xadvance": fc["width"],
+                    "page": 0,
+                    "chnl": 15
+                }})
+                x += fc["width"]
+
+            with open(font_path / f"{name}.fnt", 'w') as fnt_file:
+                for i in range(len(bmfont)):
+                    for tag, attributes in bmfont[i].items():
+                        parts = [tag]
+                        for key, value in attributes.items():
+                            if isinstance(value, list):
+                                parts.append(f"{key}={','.join(map(str, value))}")
+                            elif isinstance(value, str):
+                                parts.append(f'{key}="{value}"')
+                            else:
+                                parts.append(f"{key}={value}")
+
+                        fnt_file.write(' '.join(parts) + '\n')
 
         elif 3 <= chunk <= 134: # pictures
             wl_pic, buf = File_VGA_ReadPic(ctx, chunk, palette)
