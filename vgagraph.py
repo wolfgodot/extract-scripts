@@ -242,8 +242,34 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
         if 1 <= chunk <= 2: # fonts
             font = File_VGA_ReadChunk(ctx, chunk)
-            with open(font_path / f"{name}.bin", 'wb') as fp:
-                fp.write(font)
+            v = memoryview(font)
+
+            height = struct.unpack('<h', v[0:2])[0]
+            for i in range(256):
+                loc = struct.unpack('<h', v[2 + (i * 2):2 + (i * 2 + 2)])[0]
+                width = struct.unpack('<b', v[(2 + 256 * 2) + i:(2 + 256 * 2) + i + 1])[0]
+
+                if loc == 0 or width == 0:
+                    continue
+
+                buf = bytearray(width * height * 4)
+                for j in range(width * height):
+                    b = v[loc + j]
+                    if b != 0x00: # alternatively: == 0x0F, holds for WL6
+                        buf[j * 4 + 0] = 255
+                        buf[j * 4 + 1] = 255
+                        buf[j * 4 + 2] = 255
+                        buf[j * 4 + 3] = 255
+                    else:
+                        buf[j * 4 + 0] = 0
+                        buf[j * 4 + 1] = 0
+                        buf[j * 4 + 2] = 0
+                        buf[j * 4 + 3] = 0
+
+                im = Image.frombytes('RGBA', (width, height), bytes(buf), 'raw')
+                im.save(font_path / f"{name}_{i}.png")
+
+                # TODO: save as BMFont
 
         elif 3 <= chunk <= 134: # pictures
             wl_pic, buf = File_VGA_ReadPic(ctx, chunk, palette)
