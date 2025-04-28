@@ -7,8 +7,9 @@ from typing import List
 
 from PIL import Image
 
-from palette import WolfPal, SodPal
-from version_defs import gen_vgagraph_lookup_table
+from palette import RGB, WolfPal, SodPal
+from version_defs import *
+
 
 @dataclass
 class wl_picture:
@@ -22,9 +23,7 @@ class VGAContext:
     DictName: Path = Path()
     FileName: Path = Path()
     offset: List[int] = field(default_factory=list)
-    pictable: List[wl_picture] = field(default_factory=list)
     hufftable: List[tuple[int, int]] = field(default_factory=list)
-    names: List[str] = field(default_factory=list)
 
 
 def File_HuffExpand(source, target, expanded_size, compressed_size, dictionary):
@@ -70,7 +69,7 @@ def File_HuffExpand(source, target, expanded_size, compressed_size, dictionary):
     return
 
 
-def File_VGA_ReadChunk(ctx: VGAContext, n):
+def File_VGA_ReadChunk(ctx: VGAContext, n, chunk_type: VGAChunkType):
     if n < 0 or n >= ctx.TotalChunks:
         print(f"FileIO: VGA chunk index out of bounds [0, {ctx.TotalChunks}]: {n}")
         return None
@@ -93,9 +92,9 @@ def File_VGA_ReadChunk(ctx: VGAContext, n):
     if not src:
         return None
 
-    if n == 0: # picdef
+    if chunk_type == VGAChunkType.STRUCTPIC:
         expanded = ctx.TotalChunks * 4
-    elif n == 135: # tile8
+    elif chunk_type == VGAChunkType.TILE8:
         expanded = 35 * 64 # BLOCK * NUMTILE8
     else:
         expanded = struct.unpack('<L', src[:4])[0]
@@ -103,8 +102,8 @@ def File_VGA_ReadChunk(ctx: VGAContext, n):
     if expanded == 0:
         return None
 
-    # Skip length bytes (except for TILE8)
-    if n != 135:
+    # Skip length bytes
+    if chunk_type != VGAChunkType.TILE8:
         src = src[4:]
 
     target = bytearray(expanded)
@@ -133,25 +132,6 @@ def deplane(buf, width, height, palette):
         buf2[n * 3 + 2] = palette[color_idx][2]
 
     return buf2
-
-
-def File_VGA_ReadPic(ctx: VGAContext, chunk, palette):
-    picnum = chunk - 3
-    if picnum < 0:
-        return None
-
-    wl_pic = ctx.pictable[picnum]
-    if wl_pic.width < 1 or wl_pic.width > 320 or wl_pic.height < 1 or wl_pic.height > 200:
-        return None  # Not a picture
-
-    buf = File_VGA_ReadChunk(ctx, chunk)
-
-    if buf is None:
-        return None
-
-    buf1 = deplane(buf, wl_pic.width, wl_pic.height, palette)
-
-    return wl_pic, buf1
 
 
 def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, vga_path: Path):
@@ -187,18 +167,6 @@ def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, v
                 offset = -1
             ctx.offset.append(offset)
 
-    # Read picture definitions from chunk 0
-    picdef = File_VGA_ReadChunk(ctx, 0)
-    if picdef is None:
-        print("Failed to read picture definitions chunk")
-        return 0
-
-    ctx.pictable = []
-    for i in range(ctx.TotalChunks):
-        width = struct.unpack('<H', picdef[i * 4:i * 4 + 2])[0]
-        height = struct.unpack('<H', picdef[i * 4 + 2:i * 4 + 4])[0]
-        ctx.pictable.append(wl_picture(width, height))
-
     print("FileIO: VGA graphics files")
     print(f"-> dict: {dict_path}")
     print(f"-> head: {header_path}")
@@ -208,17 +176,6 @@ def File_VGA_OpenVgaFiles(ctx: VGAContext, dict_path: Path, header_path: Path, v
 
 
 def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
-    spear = True if dict_path.suffix.lower() == ".sod" else False
-
-    ctx = VGAContext()
-    ctx.names = gen_vgagraph_lookup_table(wl6=not spear)
-
-    palette = SodPal if spear else WolfPal
-
-    if not File_VGA_OpenVgaFiles(ctx, dict_path, header_path, vga_path):
-        print("Failed to open VGA files")
-        sys.exit(1)
-
     # Create output directories
     font_path = Path("vga/fonts")
     font_path.mkdir(parents=True, exist_ok=True)
@@ -238,13 +195,63 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
     endarts_path = Path("vga/endarts")
     endarts_path.mkdir(parents=True, exist_ok=True)
 
-    # Extract everything (hardcoded indexes based on vgapics.h, tested only with WL6)
-    # TODO: wtf is chunk 149?
-    for chunk in range(0, ctx.TotalChunks - 1):
-        name = ctx.names[chunk]
+    palettes_path = Path("vga/palettes")
+    palettes_path.mkdir(parents=True, exist_ok=True)
 
-        if 1 <= chunk <= 2: # fonts
-            font = File_VGA_ReadChunk(ctx, chunk)
+    spear = True if dict_path.suffix.lower() == ".sod" else False
+
+    ctx = VGAContext()
+
+    palette = SodPal if spear else WolfPal
+    names = gen_vgagraph_name_lookup_table(wl6=not spear, sod=spear)
+    range_map = sod_vga_type_range_map if spear else wl6_vga_type_range_map
+
+    if not File_VGA_OpenVgaFiles(ctx, dict_path, header_path, vga_path):
+        print("Failed to open VGA files")
+        sys.exit(1)
+
+    # Read picture definitions from chunk 0
+    buf = File_VGA_ReadChunk(ctx, range_map[VGAChunkType.STRUCTPIC][0], VGAChunkType.STRUCTPIC)
+    if buf is None:
+        print("Failed to read picture definitions chunk")
+        return
+
+    pictable = []
+    for i in range(ctx.TotalChunks):
+        width = struct.unpack('<H', buf[i * 4:i * 4 + 2])[0]
+        height = struct.unpack('<H', buf[i * 4 + 2:i * 4 + 4])[0]
+        pictable.append(wl_picture(width, height))
+
+    # Read palettes ahead of time for SOD
+    external_palettes = []
+    for chunk in range_to_array(VGAChunkType.PALETTE, range_map):
+        buf = File_VGA_ReadChunk(ctx, chunk, VGAChunkType.PALETTE)
+        with open(palettes_path / f"{names[chunk]}.lmp", 'wb') as fp:
+            fp.write(buf)
+
+        v = memoryview(buf)
+
+        external_palette = []
+        for i in range(0, 256):
+            r = struct.unpack('<B', v[i * 3 + 0:i * 3 + 1])[0]
+            g = struct.unpack('<B', v[i * 3 + 1:i * 3 + 2])[0]
+            b = struct.unpack('<B', v[i * 3 + 2:i * 3 + 3])[0]
+            external_palette.append(RGB(r, g, b))
+
+        external_palettes.append(external_palette)
+
+
+    for chunk in range(1, ctx.TotalChunks - 1):
+        chunk_type, chunk_idx = get_chunk_type_and_index(chunk, range_map)
+        if chunk_type is None:
+            print(f"unknown vgagraph chunk: {chunk}")
+            continue
+
+        name = names[chunk]
+
+        # REFACTOR: move File_VGA_ReadChunk outside, DRY
+        if chunk_type == VGAChunkType.FONT:
+            font = File_VGA_ReadChunk(ctx, chunk, chunk_type)
             v = memoryview(font)
 
             font_chars = []
@@ -260,7 +267,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                 font_chars.append({
                     "letter": chr(i),
                     "buf": memoryview(v[loc:loc + width * height]),
-                    "width" : width,
+                    "width": width,
                 })
 
             # TODO: save as optimized "power of two" cells instead of one line
@@ -274,7 +281,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                     for x in range(fc["width"]):
                         i = y * fc["width"] + x
                         j = (y * total_width + x + stride) * 4
-                        if fc["buf"][i] != 0x00: # alternatively: == 0x0F, holds for WL6
+                        if fc["buf"][i] != 0x00:  # alternatively: == 0x0F, holds for WL6
                             buf[j + 0] = 255
                             buf[j + 1] = 255
                             buf[j + 2] = 255
@@ -305,7 +312,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                         "smooth": 0,
                         "aa": 1,
                         "padding": [0, 0, 0, 0],
-                        "spacing": [0, 0], # [1,1] ?
+                        "spacing": [0, 0],  # [1,1] ?
                         "outline": 0
                     }
                 },
@@ -366,19 +373,48 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
                         fnt_file.write(' '.join(parts) + '\n')
 
-        elif 3 <= chunk <= 134: # pictures
-            wl_pic, buf = File_VGA_ReadPic(ctx, chunk, palette)
-            im = Image.frombytes('RGB', (wl_pic.width, wl_pic.height), bytes(buf), 'raw')
-            im.save(pics_path / f"{chunk - 3}_{name}.png")
+        elif chunk_type == VGAChunkType.PICTURE:
+            def read_pic(chunk_idx_, chunk_):
+                wl_pic = pictable[chunk_idx_]
+                assert (320 >= wl_pic.width >= 1 <= wl_pic.height <= 200)
 
-        elif chunk == 135: # TILE8
-            buf = File_VGA_ReadChunk(ctx, chunk)
+                buf_ = File_VGA_ReadChunk(ctx, chunk_, chunk_type)
+
+                palette_ = palette
+
+                if spear:
+                    pal_idx = sod_pic_palette_map.get(chunk_idx_)
+                    if pal_idx is not None:
+                        palette_ = external_palettes[pal_idx]
+
+                return (wl_pic.width, wl_pic.height), deplane(buf_, wl_pic.width, wl_pic.height, palette_)
+
+            # Skip second part of the picture
+            if spear and chunk_idx - 1 in sod_half_pics:
+                continue
+
+            size, buf = read_pic(chunk_idx, chunk)
+
+            # Merge two parts into one picture (320x80 + 320x120 = 320x200)
+            if spear and chunk_idx in sod_half_pics:
+                size1, buf1 = read_pic(chunk_idx + 1, chunk + 1)
+                assert (size[0] == size1[0] == 320)
+                assert (size[1] == 80 and size1[1] == 120)
+                buf.extend(buf1)
+                size = (size[0], size[1] + size1[1])
+
+            im = Image.frombytes('RGB', size, bytes(buf), 'raw')
+            im.save(pics_path / f"{chunk_idx}_{name}.png")
+
+
+        elif chunk_type == VGAChunkType.TILE8:
+            buf = File_VGA_ReadChunk(ctx, chunk, chunk_type)
             v = memoryview(buf)
 
             tiles = []
 
             for tile in range(0, 35): #define NUMTILE8 35
-                tile_buf = deplane(v[64 * tile:64 * tile + 65], 8, 8, palette)
+                tile_buf = deplane(v[64 * tile:64 * tile + 64], 8, 8, palette)
                 tiles.append(tile_buf)
 
             # Generate nine-patch (3x3 tiles) rectangle texture for window borders
@@ -411,17 +447,21 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
             im = Image.frombytes('RGB', (8 * 3, 8 * 3), bytes(patch_buf), 'raw')
             im.save(tile8_path / f"WINDOW.png")
 
-        elif 136 <= chunk <= 137: # endscreens
-            endscreen = File_VGA_ReadChunk(ctx, chunk)
+        elif chunk_type == VGAChunkType.ENDSCREEN:
+            endscreen = File_VGA_ReadChunk(ctx, chunk, chunk_type)
             with open(endscreens_path / f"{name}.bin", 'wb') as fp:
                 fp.write(endscreen)
 
-        elif chunk == 138 or (143 <= chunk <= 148): # endarts
-            endart = File_VGA_ReadChunk(ctx, chunk)
+        elif chunk_type == VGAChunkType.ENDART:
+            endart = File_VGA_ReadChunk(ctx, chunk, chunk_type)
             with open(endarts_path / f"{name}.txt", 'wb') as fp:
                 fp.write(endart)
 
-        elif 139 <= chunk <= 148: # demos
-            demo = File_VGA_ReadChunk(ctx, chunk)
+        elif chunk_type == VGAChunkType.DEMO:
+            demo = File_VGA_ReadChunk(ctx, chunk, chunk_type)
             with open(demos_path / f"{name}.bin", 'wb') as fp:
                 fp.write(demo)
+
+        elif chunk_type == VGAChunkType.PALETTE:
+            # Already saved
+            continue

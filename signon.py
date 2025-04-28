@@ -1,9 +1,9 @@
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
 
 from palette import WolfPal, SodPal
+
 
 def extract_signon(sod: bool):
     print("FileIO: SIGNON screen")

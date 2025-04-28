@@ -1,8 +1,100 @@
+from enum import Enum
+
+class VGAChunkType(Enum):
+    STRUCTPIC = 0
+    FONT = 1
+    PICTURE = 2
+    TILE8 = 3
+    ENDSCREEN = 4
+    ENDART = 5
+    DEMO = 6
+    PALETTE = 7
+
+# reference: WDC
+wl6_vga_type_range_map = {
+    VGAChunkType.STRUCTPIC: [0],
+    VGAChunkType.FONT: [1, 2],
+    VGAChunkType.PICTURE: [(3, 134)],
+    VGAChunkType.TILE8: [135],
+    VGAChunkType.ENDSCREEN: [136, 137],
+    VGAChunkType.ENDART: [138, (143, 148)],
+    VGAChunkType.DEMO: [(139, 148)]
+}
+
+# reference: WDC
+sod_vga_type_range_map = {
+    VGAChunkType.STRUCTPIC: [0],
+    VGAChunkType.FONT: [1, 2],
+    VGAChunkType.PICTURE: [(3, 149)],
+    VGAChunkType.TILE8: [150],
+    VGAChunkType.ENDSCREEN: [151, 152],
+    VGAChunkType.PALETTE: [(153, 163)],
+    VGAChunkType.DEMO: [(164, 167)],
+    VGAChunkType.ENDART: [168],
+}
+
+
+def get_chunk_type_and_index(chunk, range_map):
+    for t, ra in range_map.items():
+        off = 0
+        for r in ra:
+            if isinstance(r, int):
+                if chunk == r:
+                    return t, off
+                else:
+                    off += 1
+            elif isinstance(r, tuple):
+                if r[0] <= chunk <= r[1]:
+                    return t, chunk - r[0] + off
+                if chunk > r[1]:
+                    off += r[1] - r[0]
+
+    return None, 0
+
+
+def range_to_array(chunk_type: VGAChunkType, range_map):
+    arr = []
+
+    ra = range_map.get(chunk_type)
+    if ra is None:
+        return arr
+
+    for r in ra:
+        if isinstance(r, int):
+            arr.append(r)
+        elif isinstance(r, tuple):
+            arr.extend(range(r[0], r[1] + 1))
+
+    return arr
+
+# We could map name->name instead of idx->idx but meh
+# Yes, id DID waste disk space! unbelievable!
+sod_pic_palette_map = {
+    76: 0,   # TITLE1PIC       -> TITLEPALETTE
+    77: 0,   # TITLE2PIC       -> TITLEPALETTE
+    78: 1,   # ENDSCREEN11PIC  -> END1PALETTE    seems identical to sodpal, but didnt check
+    79: 2,   # ENDSCREEN12PIC  -> END2PALETTE    same as END2PALETTE
+    80: 3,   # ENDSCREEN3PIC   -> END3PALETTE
+    81: 4,   # ENDSCREEN4PIC   -> END4PALETTE
+    82: 5,   # ENDSCREEN5PIC   -> END5PALETTE
+    83: 6,   # ENDSCREEN6PIC   -> END6PALETTE
+    84: 7,   # ENDSCREEN7PIC   -> END7PALETTE    same as END5PALETTE
+    85: 8,   # ENDSCREEN8PIC   -> END8PALETTE    same as END5PALETTE
+    86: 9,   # ENDSCREEN9PIC   -> END9PALETTE
+    90: 10,  # IDGUYS1PIC      -> IDGUYSPALETTE
+    91: 10,  # IDGUYS2PIC      -> IDGUYSPALETTE
+}
+
+sod_half_pics = [
+    76, # + 77 = TITLEPIC
+    90  # + 91 = IDGUYSPIC
+]
+
 # reference: `wl_def.h` / anonymous enum (SPR_*)
-def gen_vswap_lookup_table(apogee_1_0=False,
-                           apogee_1_1=False,
-                           spear=False,
-                           upload=False):
+def gen_vswap_name_lookup_table(apogee_1_0=False,
+                                apogee_1_1=False,
+                                spear=False,
+                                upload=False):
 
     sprite_names = []
 
@@ -243,13 +335,13 @@ def gen_vswap_lookup_table(apogee_1_0=False,
 
 
 # reference: `gfxv_*.h` / enum graphicnums
-def gen_vgagraph_lookup_table(apogee_1_0=False,
-                              apogee_1_1=False,
-                              apogee_1_2=False,
-                              upload=False,
-                              japanese=False,
-                              sod=False,
-                              wl6=True):
+def gen_vgagraph_name_lookup_table(apogee_1_0=False,
+                                   apogee_1_1=False,
+                                   apogee_1_2=False,
+                                   upload=False,
+                                   japanese=False,
+                                   sod=False,
+                                   wl6=True):
 
     # Temporarily disable WL6 if another define is active
     if japanese or sod or apogee_1_0 or apogee_1_1 or apogee_1_2:

@@ -8,7 +8,7 @@ from typing import List
 from PIL import Image
 
 from palette import WolfPal, SodPal
-from version_defs import gen_vswap_lookup_table
+from version_defs import gen_vswap_name_lookup_table
 
 @dataclass
 class Shape:
@@ -176,13 +176,6 @@ def File_PML_LoadSprite(ctx: VSwapContext, n, block, palette=WolfPal):
 
 
 def extract_vswap(vswap_path):
-    spear = True if vswap_path.suffix.lower() == ".sod" else False
-
-    ctx = VSwapContext()
-    ctx.names = gen_vswap_lookup_table(spear=spear)
-
-    palette = SodPal if spear else WolfPal
-
     walls_path = Path("vswap/walls")
     walls_path.mkdir(parents=True, exist_ok=True)
 
@@ -191,6 +184,13 @@ def extract_vswap(vswap_path):
 
     digisounds_path = Path("vswap/digisounds")
     digisounds_path.mkdir(parents=True, exist_ok=True)
+
+    spear = True if vswap_path.suffix.lower() == ".sod" else False
+
+    ctx = VSwapContext()
+    ctx.names = gen_vswap_name_lookup_table(spear=spear)
+
+    palette = SodPal if spear else WolfPal
 
     if not os.path.isfile(vswap_path):
         print(f"Error: Input file not found: {vswap_path}")
