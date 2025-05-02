@@ -1,3 +1,4 @@
+import math
 import os
 import struct
 import sys
@@ -240,13 +241,13 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
 
         external_palettes.append(external_palette)
 
-
     for chunk in range(1, ctx.TotalChunks - 1):
         chunk_type, chunk_idx = get_chunk_type_and_index(chunk, range_map)
         if chunk_type is None:
             print(f"unknown vgagraph chunk: {chunk}")
             continue
 
+        idx_formant = range_idx_formant(chunk_type, range_map)
         name = names[chunk]
 
         # REFACTOR: move File_VGA_ReadChunk outside, DRY
@@ -404,7 +405,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                 size = (size[0], size[1] + size1[1])
 
             im = Image.frombytes('RGB', size, bytes(buf), 'raw')
-            im.save(pics_path / f"{chunk_idx}_{name}.png")
+            im.save(pics_path / f"{idx_formant.format(chunk_idx)}_{name}.png")
 
 
         elif chunk_type == VGAChunkType.TILE8:

@@ -1,3 +1,4 @@
+import math
 import os
 import struct
 import sys
@@ -200,21 +201,29 @@ def extract_vswap(vswap_path):
         print("Failed to open page file.")
         sys.exit(1)
 
+    # Ensure a leading zero
+    def get_formant(n: int):
+        return f"{{:0{int(math.log10(n)) + 1}d}}"
+
+    idx_formant = get_formant(math.ceil((ctx.SpriteStart - 1) / 2))
     for i in range(ctx.SpriteStart):
         block = bytearray(64 * 64 * 3)
         if File_PML_LoadWall(ctx, i, block, palette):
             im = Image.frombytes('RGB', (64, 64), block, 'raw')
             idx, shaded = divmod(i, 2)  # every second texture is a shaded variant
-            im.save(walls_path / f"{idx}.png" if shaded == 0 else walls_path / f"{idx}_shaded.png")
+            idx_str = idx_formant.format(idx)
+            im.save(walls_path / f"{idx_str}.png" if shaded == 0 else walls_path / f"{idx_str}_shaded.png")
         else:
             print(f"Failed to load wall {i}.")
 
+    idx_formant = get_formant(ctx.SoundStart - ctx.SpriteStart - 1)
     for i in range(ctx.SpriteStart, ctx.SoundStart):
         block = bytearray(64 * 64 * 4)
         if File_PML_LoadSprite(ctx, i, block, palette):
             im = Image.frombytes('RGBA', (64, 64), block, 'raw')
             shapenum = i - ctx.SpriteStart
-            im.save(sprites_path / f"{shapenum}_{ctx.names[shapenum]}.png")
+            shapenum_str = idx_formant.format(shapenum)
+            im.save(sprites_path / f"{shapenum_str}_{ctx.names[shapenum]}.png")
         else:
             print(f"Failed to load sprite {i}.")
 
@@ -227,10 +236,11 @@ def extract_vswap(vswap_path):
     with open(digisounds_path / "digimap.bin", "wb") as digimap_file:
         digimap_file.write(digimap)
 
+    idx_formant = get_formant(digimap_n - ctx.SoundStart - 1)
     for i in range(ctx.SoundStart, digimap_n):
         block = bytearray(ctx.Pages[i].length)
         soundnum = i - ctx.SoundStart
         if not File_PML_ReadPage(ctx, i, block):
             print(f"Failed to load sound {soundnum}.")
-        with open(digisounds_path / f"{soundnum}.bin", "wb") as sound_file:
+        with open(digisounds_path / f"{idx_formant.format(soundnum)}.bin", "wb") as sound_file:
             sound_file.write(block)

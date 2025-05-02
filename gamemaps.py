@@ -1,4 +1,5 @@
 import json
+import math
 import struct
 from pathlib import Path
 
@@ -96,6 +97,8 @@ def extract_maps(maphead_path: Path, gamemaps_path: Path):
 
     print(f"-> Total Levels: {len(map_offsets)}")
 
+    idx_formant = f"{{:0{int(math.log10(len(map_offsets) - 1)) + 1}d}}"
+
     with open(gamemaps_path, "rb") as gm:
         for level, map_offset in enumerate(map_offsets):
             gm.seek(map_offset)
@@ -134,11 +137,11 @@ def extract_maps(maphead_path: Path, gamemaps_path: Path):
             else:
                 combined = base
 
-            Image.fromarray(combined, "RGB").save(thumb_path / f"{level}_{name}.png")
+            Image.fromarray(combined, "RGB").save(thumb_path / f"{idx_formant.format(level)}_{name}.png")
 
             grid = [layer1[y * 64:(y + 1) * 64] for y in range(64)]
 
-            with open(json_path / f"{level}_{name}.json", "w") as f:
+            with open(json_path / f"{idx_formant.format(level)}_{name}.json", "w") as f:
                 json.dump(grid, f)
 
     return 1

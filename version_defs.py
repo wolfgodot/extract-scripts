@@ -1,3 +1,4 @@
+import math
 from enum import Enum
 
 class VGAChunkType(Enum):
@@ -66,6 +67,27 @@ def range_to_array(chunk_type: VGAChunkType, range_map):
             arr.extend(range(r[0], r[1] + 1))
 
     return arr
+
+
+def range_idx_formant(chunk_type: VGAChunkType, range_map):
+    formant = "{:d}"
+
+    ra = range_map.get(chunk_type)
+    if ra is None:
+        return formant
+
+    n = 0
+    for r in ra:
+        if isinstance(r, int):
+            n += 1
+        elif isinstance(r, tuple):
+            n += r[1] - r[0]
+
+    if n < 10:
+        return formant
+
+    return f"{{:0{int(math.log10(n)) + 1}d}}"
+
 
 # We could map name->name instead of idx->idx but meh
 # Yes, id DID waste disk space! unbelievable!
