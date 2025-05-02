@@ -69,8 +69,6 @@ def File_MAP_Expand(raw_bytes, rlew_tag):
 
 
 def extract_maps(maphead_path: Path, gamemaps_path: Path):
-    level = 1
-
     print("FileIO: Map Files")
 
     # Create output directories
@@ -149,12 +147,12 @@ def extract_maps(maphead_path: Path, gamemaps_path: Path):
 
 def tile_to_color(tile):
     if tile == 0:
-        return (255, 255, 255)
+        return 255, 255, 255
     elif 1 <= tile <= 63:
-        return (64, 64, 64)
+        return 64, 64, 64
     elif 90 <= tile <= 101:
-        return (0, 128, 255)
+        return 0, 128, 255
     elif 106 <= tile <= 111:
-        return (255, 0, 0)
+        return 255, 0, 0
     else:
-        return (128, 128, 128)
+        return 128, 128, 128
