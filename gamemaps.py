@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from palette import RGB, WolfPal, SodPal
+from version_defs import *
 
 def File_CarmackExpand(src):
     NEARTAG, FARTAG = 0xA7, 0xA8
@@ -70,6 +72,10 @@ def File_MAP_Expand(raw_bytes, rlew_tag):
 
 def extract_maps(maphead_path: Path, gamemaps_path: Path):
     print("FileIO: Map Files")
+
+    spear = True if maphead_path.suffix.lower() == ".sod" else False
+    palette = SodPal if spear else WolfPal
+    ceiling_colors = sod_ceilings_colors if spear else wl6_ceilings_colors
 
     # Create output directories
     thumb_path = Path("maps/thumbs")
@@ -137,13 +143,16 @@ def extract_maps(maphead_path: Path, gamemaps_path: Path):
 
             Image.fromarray(combined, "RGB").save(thumb_path / f"{idx_formant.format(level)}_{name}.png")
 
-            grid = [
-                [layer1[y * 64:(y + 1) * 64] for y in range(64)],
-                [layer2[y * 64:(y + 1) * 64] for y in range(64)]
-            ]
+            map_root = {
+                "Name": name,
+                "CeilingColor": palette[ceiling_colors[level]],
+                "FloorColor": palette[floor_color],
+                "Tiles": layer1,
+                "Things": layer2,
+            }
 
             with open(json_path / f"{idx_formant.format(level)}_{name}.json", "w") as f:
-                json.dump(grid, f)
+                json.dump(map_root, f)
 
     return 1
 
