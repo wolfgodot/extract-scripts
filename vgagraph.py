@@ -325,7 +325,7 @@ def extract_vga(dict_path: Path, header_path: Path, vga_path: Path):
                         "scaleH": height,
                         "pages": 1,
                         "packed": 0,
-                        "alphaChnl": 2,
+                        "alphaChnl": 0,
                         "redChnl": 0,
                         "greenChnl": 0,
                         "blueChnl": 0,
